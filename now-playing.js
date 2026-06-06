@@ -14,12 +14,21 @@ const nowPlayingArtistLine = document.querySelector('.now-playing-artist-line');
 const playerControls = document.querySelectorAll('.player-control');
 const playPauseControl = document.querySelector('[data-mpris-action="toggle"]');
 const coverThemeToggle = document.querySelector('#cover-theme-toggle');
+const lyricsDrawer = document.querySelector('.lyrics-drawer');
+const lyricsTab = document.querySelector('.lyrics-tab');
+const lyricsClose = document.querySelector('.lyrics-close');
+const lyricsStatus = document.querySelector('#lyrics-status');
+const lyricsLines = document.querySelector('#lyrics-lines');
 
 const MPRIS_URL = '/mpris';
 const MPRIS_CONTROL_URL = '/mpris/control';
+const LYRICS_URL = '/lyrics';
 const MPRIS_POLL_INTERVAL = 1000;
 const ADAPTIVE_COLORS_STORAGE_KEY = 'spinachMusic.adaptiveCoverColors';
 const COVER_BACKGROUND_STORAGE_KEY = 'spinachMusic.coverBackground';
+const NAVIDROME_STORAGE_KEY = 'spinachMusic.navidromeConnection';
+const SUBSONIC_VERSION = '1.16.1';
+const CLIENT_NAME = 'spinach-music';
 
 const root = document.documentElement;
 const defaultTheme = {
@@ -43,6 +52,13 @@ let isScrubbingProgress = false;
 let currentDuration = 0;
 let currentCoverUrl = '';
 let appliedCoverBackgroundUrl = '';
+let currentSongData = null;
+let lastLyricsKey = '';
+let lyricsEntries = [];
+let activeLyricsIndex = -1;
+let isFetchingLyrics = false;
+let pendingLyricsRefresh = false;
+let lyricsFetchToken = 0;
 
 try {
     appliedCoverBackgroundUrl = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null')?.url || '';
@@ -81,6 +97,232 @@ const formatSongMeta = (album, artist) => ({
     album: album || '',
     artist: artist || '',
 });
+
+const formatLyricsKey = (data = {}) => [data.title, data.artist, data.album, Math.round(data.duration || 0)].join('|');
+
+const parseLyricsTimestamp = (minutes, seconds) => (Number(minutes) * 60) + Number(seconds);
+
+const parseSyncedLyrics = (lyrics = '') => lyrics
+    .split('\n')
+    .map((line) => {
+        const match = line.match(/^\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$/);
+        return match ? { time: parseLyricsTimestamp(match[1], match[2]), text: match[3].trim() } : null;
+    })
+    .filter((entry) => entry && entry.text);
+
+const loadNavidromeConnection = () => {
+    try {
+        return JSON.parse(localStorage.getItem(NAVIDROME_STORAGE_KEY) || 'null');
+    } catch {
+        return null;
+    }
+};
+
+const normalizeServerUrl = (rawUrl) => {
+    const normalized = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+        ? rawUrl
+        : `https://${rawUrl}`;
+    const baseUrl = new URL(normalized);
+
+    if (!baseUrl.pathname.endsWith('/')) {
+        baseUrl.pathname += '/';
+    }
+
+    return baseUrl;
+};
+
+const fetchNavidromeLyrics = async () => {
+    const connection = loadNavidromeConnection();
+
+    if (!connection?.url || !connection?.username || !connection?.password || !currentSongData?.title) {
+        throw new Error('no navidrome connection');
+    }
+
+    const url = new URL('/navidrome/lyrics', window.location.origin);
+    url.searchParams.set('url', connection.url);
+    url.searchParams.set('username', connection.username);
+    url.searchParams.set('password', connection.password);
+    url.searchParams.set('title', currentSongData.title);
+    url.searchParams.set('artist', currentSongData.artist || '');
+    url.searchParams.set('album', currentSongData.album || '');
+    url.searchParams.set('duration', String(currentSongData.duration || ''));
+
+    const response = await fetch(url.toString(), { cache: 'no-store' });
+    const payload = await response.json();
+
+    if (!response.ok) {
+        throw new Error(payload?.error || 'navidrome lyrics not found');
+    }
+
+    return payload;
+};
+
+const fetchLrclibLyrics = async () => {
+    const url = new URL(LYRICS_URL, window.location.origin);
+    url.searchParams.set('title', currentSongData.title);
+    url.searchParams.set('artist', currentSongData.artist);
+    url.searchParams.set('album', currentSongData.album || '');
+    url.searchParams.set('duration', String(currentSongData.duration || ''));
+
+    const response = await fetch(url.toString(), { cache: 'no-store' });
+    if (!response.ok) {
+        throw new Error('lyrics not found');
+    }
+
+    return {
+        ...await response.json(),
+        source: 'lrclib',
+    };
+};
+
+const setLyricsStatus = (message) => {
+    if (lyricsStatus) {
+        lyricsStatus.textContent = message;
+    }
+};
+
+const renderLyrics = (entries, plainLyrics = '') => {
+    if (!lyricsLines) {
+        return;
+    }
+
+    lyricsLines.innerHTML = '';
+
+    if (entries.length) {
+        entries.forEach((entry, index) => {
+            const line = document.createElement('p');
+            line.className = 'lyrics-line';
+            line.dataset.index = String(index);
+            line.dataset.time = String(entry.time);
+            line.title = `jump to ${formatPlaybackTime(entry.time)}`;
+            line.textContent = entry.text;
+            lyricsLines.append(line);
+        });
+        return;
+    }
+
+    plainLyrics.split('\n').filter(Boolean).forEach((text) => {
+        const line = document.createElement('p');
+        line.className = 'lyrics-line';
+        line.textContent = text.trim();
+        lyricsLines.append(line);
+    });
+};
+
+const syncLyricsToPosition = (position) => {
+    if (!lyricsEntries.length || !lyricsLines || !Number.isFinite(position)) {
+        return;
+    }
+
+    const nextIndex = lyricsEntries.findIndex((entry, index) => {
+        const next = lyricsEntries[index + 1];
+        return position >= entry.time && (!next || position < next.time);
+    });
+
+    if (nextIndex < 0 || nextIndex === activeLyricsIndex) {
+        return;
+    }
+
+    lyricsLines.querySelector('.lyrics-line.active')?.classList.remove('active');
+    const activeLine = lyricsLines.querySelector(`[data-index="${nextIndex}"]`);
+    activeLine?.classList.add('active');
+    activeLine?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    activeLyricsIndex = nextIndex;
+};
+
+const fetchLyrics = async (force = false) => {
+    if (!currentSongData?.title || !currentSongData?.artist) {
+        setLyricsStatus('no song info yet');
+        return;
+    }
+
+    if (isFetchingLyrics) {
+        pendingLyricsRefresh = true;
+        return;
+    }
+
+    const lyricsKey = formatLyricsKey(currentSongData);
+    if (!force && lyricsKey === lastLyricsKey && lyricsEntries.length) {
+        syncLyricsToPosition(currentSongData.position);
+        return;
+    }
+
+    const fetchToken = ++lyricsFetchToken;
+
+    try {
+        isFetchingLyrics = true;
+        setLyricsStatus('fetching synced lyrics...');
+        lyricsEntries = [];
+        activeLyricsIndex = -1;
+        renderLyrics([]);
+
+        const navidromeLyrics = await fetchNavidromeLyrics().catch(() => null);
+        if (fetchToken !== lyricsFetchToken) {
+            return;
+        }
+
+        const navidromeSynced = parseSyncedLyrics(navidromeLyrics?.syncedLyrics || '');
+        if (navidromeSynced.length) {
+            lyricsEntries = navidromeSynced;
+            renderLyrics(lyricsEntries, navidromeLyrics.plainLyrics || '');
+            lastLyricsKey = lyricsKey;
+            setLyricsStatus('synced from navidrome');
+            syncLyricsToPosition(currentSongData.position);
+            return;
+        }
+
+        if (navidromeLyrics?.plainLyrics) {
+            renderLyrics([], navidromeLyrics.plainLyrics || '');
+            setLyricsStatus('plain lyrics from navidrome, checking synced lyrics...');
+        }
+
+        const lrclibLyrics = await fetchLrclibLyrics().catch(() => null);
+        if (fetchToken !== lyricsFetchToken) {
+            return;
+        }
+
+        const lrclibSynced = parseSyncedLyrics(lrclibLyrics?.syncedLyrics || '');
+        if (lrclibSynced.length) {
+            lyricsEntries = lrclibSynced;
+            renderLyrics(lyricsEntries, lrclibLyrics.plainLyrics || '');
+            lastLyricsKey = lyricsKey;
+            setLyricsStatus('synced from lrclib');
+            syncLyricsToPosition(currentSongData.position);
+            return;
+        }
+
+        if (lrclibLyrics) {
+            lyricsEntries = [];
+            renderLyrics([], lrclibLyrics.plainLyrics || '');
+            lastLyricsKey = lyricsKey;
+            setLyricsStatus('plain lyrics from lrclib');
+            return;
+        }
+
+        if (!navidromeLyrics?.plainLyrics) {
+            throw new Error('lyrics not found');
+        }
+
+        lastLyricsKey = lyricsKey;
+        setLyricsStatus('lyrics not found');
+    } catch {
+        if (fetchToken === lyricsFetchToken) {
+            lastLyricsKey = lyricsKey;
+            renderLyrics([]);
+            setLyricsStatus('lyrics not found');
+        }
+    } finally {
+        if (fetchToken === lyricsFetchToken) {
+            isFetchingLyrics = false;
+            if (pendingLyricsRefresh) {
+                pendingLyricsRefresh = false;
+                if (lyricsDrawer?.classList.contains('open')) {
+                    fetchLyrics(true);
+                }
+            }
+        }
+    }
+};
 
 const formatCoverIdentity = (data, fallbackTrackId) => {
     const album = String(data.album || '').trim().toLowerCase();
@@ -505,14 +747,21 @@ const setMprisSong = (data) => {
     const state = normalizePlaybackState(data.status);
     const hasSong = Boolean(data.title || data.artist || data.album);
 
+    currentSongData = data;
     setPlaybackState(state);
     nowPlayingTimer.textContent = `${formatPlaybackTime(data.position)} / ${formatPlaybackTime(data.duration)}`;
     updateStatusPillWidth();
     setProgressSlider(data.position, data.duration);
 
     if (!hasSong || state === 'stopped') {
+        currentSongData = null;
         lastTrackId = '';
         lastCoverUrl = '';
+        lastLyricsKey = '';
+        lyricsEntries = [];
+        activeLyricsIndex = -1;
+        renderLyrics([]);
+        setLyricsStatus('tap the card to fetch lyrics');
         setProgressSlider(null, null);
         setNowPlayingText('nothing playing', 'empty');
         return;
@@ -531,6 +780,10 @@ const setMprisSong = (data) => {
         );
         lastTrackId = nextTrackId;
         lastCoverUrl = coverUrl;
+
+        fetchLyrics(true);
+    } else {
+        syncLyricsToPosition(data.position);
     }
 };
 
@@ -635,6 +888,45 @@ coverThemeButton?.addEventListener('click', () => {
 
 coverThemeToggle?.addEventListener('click', () => {
     setAdaptiveCoverColorsEnabled(!adaptiveCoverColorsEnabled);
+});
+
+const openLyricsDrawer = () => {
+    lyricsDrawer?.classList.add('open');
+    lyricsDrawer?.setAttribute('aria-hidden', 'false');
+    lyricsTab?.setAttribute('aria-expanded', 'true');
+    fetchLyrics();
+};
+
+const closeLyricsDrawer = () => {
+    lyricsDrawer?.classList.remove('open');
+    lyricsDrawer?.setAttribute('aria-hidden', 'true');
+    lyricsTab?.setAttribute('aria-expanded', 'false');
+};
+
+lyricsTab?.addEventListener('click', () => {
+    if (lyricsDrawer?.classList.contains('open')) {
+        closeLyricsDrawer();
+        return;
+    }
+
+    openLyricsDrawer();
+});
+
+lyricsClose?.addEventListener('click', closeLyricsDrawer);
+
+lyricsLines?.addEventListener('click', (event) => {
+    const line = event.target.closest('.lyrics-line[data-time]');
+    if (!line) {
+        return;
+    }
+
+    const position = Number.parseFloat(line.dataset.time);
+    if (!Number.isFinite(position)) {
+        return;
+    }
+
+    sendMprisControl('seek', { position: String(position) });
+    syncLyricsToPosition(position);
 });
 
 nowPlayingCover.addEventListener('load', () => {

@@ -111,10 +111,21 @@
             <h1 class="title-txt">spinach music</h1>
             <p class="subtitle-txt">music is life</p>
             <div class="library-stats" id="library-stats" aria-live="polite">
-                <span id="artist-count">0 artists</span>
-                <span id="album-count">0 albums</span>
+                <span id="artist-count"><strong class="stat-number">0</strong> artists</span>
+                <span id="album-count"><strong class="stat-number">0</strong> albums</span>
             </div>
         </div>
+
+        <aside class="lyrics-drawer" aria-hidden="true">
+            <button class="lyrics-tab" type="button" aria-expanded="false" aria-label="open lyrics">lyrics</button>
+            <div class="lyrics-card">
+                <button class="lyrics-close" type="button">close</button>
+                <p class="lyrics-kicker">current song</p>
+                <h2>lyrics</h2>
+                <p class="lyrics-status" id="lyrics-status">tap the card to fetch lyrics</p>
+                <div class="lyrics-lines" id="lyrics-lines" aria-live="polite"></div>
+            </div>
+        </aside>
 
         <section class="now-playing-bar is-empty" aria-label="Current playing song">
             <button class="cover-theme-button" type="button" aria-label="use cover as theme">
@@ -149,8 +160,8 @@
         </section>
 
         <script src="menu.js"></script>
-        <script src="navidrome.js?v=8"></script>
-        <script src="now-playing.js?v=33"></script>
+        <script src="navidrome.js?v=9"></script>
+        <script src="now-playing.js?v=40"></script>
     </body>
 
 </html>

@@ -17,6 +17,10 @@ const setStatus = (message, type = '') => {
     navidromeStatus.className = `connection-status navidrome-status ${type}`.trim();
 };
 
+const setStatText = (element, count, label) => {
+    element.innerHTML = `<strong class="stat-number">${count}</strong> ${label}`;
+};
+
 const getErrorMessage = (error) => {
     if (error?.message === 'Failed to fetch') {
         return 'failed to fetch';
@@ -164,8 +168,8 @@ const updateLibraryStats = async (connection) => {
         getAlbumTotal(connection),
     ]);
 
-    artistCount.textContent = `${artists} artists`;
-    albumCount.textContent = `${albums} albums`;
+    setStatText(artistCount, artists, 'artists');
+    setStatText(albumCount, albums, 'albums');
 };
 
 const disconnectNavidrome = () => {
@@ -175,8 +179,8 @@ const disconnectNavidrome = () => {
     setNavidromeButtonText(false);
     setStatus('disconnected');
     libraryStats.classList.remove('open');
-    artistCount.textContent = '0 artists';
-    albumCount.textContent = '0 albums';
+    setStatText(artistCount, 0, 'artists');
+    setStatText(albumCount, 0, 'albums');
 };
 
 const connectNavidrome = async () => {
