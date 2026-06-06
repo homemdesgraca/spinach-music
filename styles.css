@@ -129,13 +129,21 @@ body::after {
 }
 
 .top-section .title-txt {
+    margin-top: 1.25rem;
+    margin-bottom: 0;
+    font-size: clamp(3.2rem, 7vw, 6rem);
+    line-height: 0.92;
+    letter-spacing: 0.055em;
+    text-shadow: 2px 2px 0 var(--color-shadow);
     transform-origin: left center;
     animation-name: slide-in-left-title;
 }
 
 .top-section .subtitle-txt {
-    margin-top: -1rem;
-    font-size: 1.4rem;
+    margin-top: -0.55rem;
+    font-size: clamp(1.7rem, 3vw, 2.45rem);
+    letter-spacing: 0.06em;
+    text-shadow: 1.5px 1.5px 0 var(--color-shadow);
     animation-duration: 0.6s;
     animation-delay: 0.95s;
 }
@@ -229,7 +237,8 @@ body::after {
 .player-controls,
 .player-progress-pill {
     position: absolute;
-    right: 0;
+    left: calc(var(--status-pill-width, 6.4rem) + 0.6rem);
+    right: auto;
     z-index: 0;
     border: 2px solid var(--color-text);
     background: var(--color-surface);

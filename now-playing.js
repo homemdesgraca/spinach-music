@@ -6,6 +6,7 @@ const nowPlayingAlbum = document.querySelector('#now-playing-album');
 const nowPlayingArtist = document.querySelector('#now-playing-artist');
 const nowPlayingCover = document.querySelector('#now-playing-cover');
 const nowPlayingTimer = document.querySelector('#now-playing-timer');
+const nowPlayingStatusPill = document.querySelector('.now-playing-status-pill');
 const nowPlayingProgress = document.querySelector('#now-playing-progress');
 const progressTimeBubble = document.querySelector('#progress-time-bubble');
 const nowPlayingTitleLine = document.querySelector('.now-playing-title-line');
@@ -85,8 +86,12 @@ const formatCoverIdentity = (data, fallbackTrackId) => {
     const album = String(data.album || '').trim().toLowerCase();
     const artist = String(data.artist || '').trim().toLowerCase();
 
-    if (album || artist) {
-        return `album:${artist}|${album}`;
+    if (album) {
+        return `album:${album}`;
+    }
+
+    if (artist) {
+        return `artist:${artist}`;
     }
 
     return data.artUrl || fallbackTrackId;
@@ -327,6 +332,14 @@ const setAdaptiveCoverColorsEnabled = (enabled) => {
     applyAdaptiveCoverColors();
 };
 
+const updateStatusPillWidth = () => {
+    if (!nowPlayingStatusPill) {
+        return;
+    }
+
+    root.style.setProperty('--status-pill-width', `${Math.ceil(nowPlayingStatusPill.offsetWidth)}px`);
+};
+
 const setProgressBubble = (seconds, percent, bubbleLeft = `${clamp(percent, 0, 100)}%`) => {
     if (!progressTimeBubble) {
         return;
@@ -494,6 +507,7 @@ const setMprisSong = (data) => {
 
     setPlaybackState(state);
     nowPlayingTimer.textContent = `${formatPlaybackTime(data.position)} / ${formatPlaybackTime(data.duration)}`;
+    updateStatusPillWidth();
     setProgressSlider(data.position, data.duration);
 
     if (!hasSong || state === 'stopped') {
@@ -537,6 +551,7 @@ const fetchMprisSong = async () => {
     } catch {
         setPlaybackState('stopped');
         nowPlayingTimer.textContent = 'mpris unavailable';
+        updateStatusPillWidth();
         setProgressSlider(null, null);
         setNowPlayingText('nothing playing', 'empty');
     } finally {
@@ -627,9 +642,13 @@ nowPlayingCover.addEventListener('load', () => {
         applyCoverBackground();
     }
 });
-window.addEventListener('resize', queueNowPlayingMarquees);
+window.addEventListener('resize', () => {
+    queueNowPlayingMarquees();
+    updateStatusPillWidth();
+});
 
 setCoverThemeToggle();
+updateStatusPillWidth();
 setPlaybackState(playbackState);
 fetchMprisSong();
 setInterval(fetchMprisSong, MPRIS_POLL_INTERVAL);
