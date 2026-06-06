@@ -3,6 +3,57 @@
     <head>
 
         <title>Spinach Music</title>
+        <script>
+            (() => {
+                try {
+                    const coverTheme = JSON.parse(localStorage.getItem('spinachMusic.coverBackground') || 'null');
+
+                    if (!coverTheme?.url) {
+                        return;
+                    }
+
+                    if (coverTheme.colors) {
+                        Object.entries(coverTheme.colors).forEach(([property, value]) => {
+                            document.documentElement.style.setProperty(property, value);
+                        });
+                    } else if (coverTheme.pageBg) {
+                        document.documentElement.style.setProperty('--color-page-bg', coverTheme.pageBg);
+                    }
+
+                    if (coverTheme.colors?.['--color-page-bg'] || coverTheme.pageBg) {
+                        document.documentElement.style.backgroundColor = coverTheme.colors?.['--color-page-bg'] || coverTheme.pageBg;
+                    }
+
+                    document.documentElement.style.setProperty('--cover-bg', `url("${coverTheme.url}")`);
+                    document.documentElement.style.setProperty('--cover-bg-opacity', '0');
+                    document.documentElement.style.setProperty('--cover-bg-scale', '1.045');
+                    document.documentElement.style.setProperty('--cover-readable-overlay', coverTheme.overlay || 'transparent');
+                    document.documentElement.classList.add('has-cover-theme');
+
+                    const revealCover = () => {
+                        requestAnimationFrame(() => {
+                            document.documentElement.style.setProperty('--cover-bg-opacity', '1');
+                            document.documentElement.style.setProperty('--cover-bg-scale', '1');
+                        });
+                    };
+                    const preload = new Image();
+                    let revealed = false;
+                    const safeReveal = () => {
+                        if (revealed) {
+                            return;
+                        }
+                        revealed = true;
+                        revealCover();
+                    };
+
+                    preload.onload = safeReveal;
+                    preload.onerror = safeReveal;
+                    preload.src = coverTheme.url;
+                    preload.decode?.().then(safeReveal).catch(() => {});
+                    window.setTimeout(safeReveal, 1600);
+                } catch {}
+            })();
+        </script>
         <link rel="stylesheet" href="styles.css">
         <link rel="stylesheet" href="config-menu.css">
         <link rel="stylesheet" href="connections-panel.css">
@@ -12,11 +63,20 @@
     <body>
         <div class="config-menu">
             <button class="config-btn" aria-label="Open settings" aria-expanded="false">⚙</button>
-            <button class="config-card">theme</button>
+            <button class="config-card theme-btn" type="button">theme</button>
             <button class="config-card">sound</button>
             <button class="config-card connections-btn" type="button">connections</button>
             <button class="config-card">about</button>
         </div>
+
+        <section class="theme-panel" aria-hidden="true">
+            <button class="theme-close" type="button">close</button>
+            <h2>theme</h2>
+            <div class="theme-card">
+                <p>cover colors</p>
+                <button class="theme-toggle" id="cover-theme-toggle" type="button" aria-pressed="false">on</button>
+            </div>
+        </section>
 
         <section class="connections-panel" aria-hidden="true">
             <button class="panel-close" type="button">close</button>
@@ -57,12 +117,19 @@
         </div>
 
         <section class="now-playing-bar is-empty" aria-label="Current playing song">
-            <img id="now-playing-cover" alt="" aria-hidden="true">
+            <button class="cover-theme-button" type="button" aria-label="use cover as theme">
+                <img id="now-playing-cover" alt="" aria-hidden="true">
+            </button>
             <span class="now-playing-copy">
                 <span class="now-playing-title-line">
                     <span id="now-playing-title">nothing playing</span>
                 </span>
-                <span id="now-playing-meta"></span>
+                <span class="now-playing-album-line">
+                    <span id="now-playing-album"></span>
+                </span>
+                <span class="now-playing-artist-line">
+                    <span id="now-playing-artist"></span>
+                </span>
             </span>
             <span class="now-playing-disc" aria-hidden="true">
                 <span class="now-playing-face">:&lt;</span>
@@ -83,7 +150,7 @@
 
         <script src="menu.js"></script>
         <script src="navidrome.js?v=8"></script>
-        <script src="now-playing.js?v=15"></script>
+        <script src="now-playing.js?v=30"></script>
     </body>
 
 </html>

@@ -1,6 +1,7 @@
 .connections-panel {
     position: absolute;
     top: 6.5rem;
+    z-index: 20;
     right: 3%;
     width: 19.5rem;
     padding: 1rem;
@@ -14,7 +15,7 @@
     opacity: 0;
     pointer-events: none;
     transform: translateY(-0.7rem) scale(0.95);
-    transition: opacity 0.25s ease-out, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity 0.25s ease-out, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .connections-panel.open {
@@ -155,7 +156,7 @@
     cursor: pointer;
     box-shadow: 2px 3px 0 var(--color-shadow);
     transform: translateY(0);
-    transition: background 0.18s ease-out, box-shadow 0.18s ease-out, color 0.18s ease-out, border-color 0.18s ease-out, transform 0.18s ease-out;
+    transition: background 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s ease-out;
 }
 
 .connection-card button:hover {

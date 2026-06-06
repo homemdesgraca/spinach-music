@@ -23,7 +23,7 @@
     border-radius: 0.6rem;
     font-size: 1.4rem;
     line-height: 1;
-    transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s ease-out, box-shadow 0.18s ease-out;
+    transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .config-btn:hover,
@@ -48,7 +48,7 @@
     pointer-events: none;
     transform: translate(0, 0) rotate(0deg) scale(0.25);
     transform-origin: top right;
-    transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease-out, background 0.18s ease-out, box-shadow 0.18s ease-out;
+    transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease-out, background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .config-menu.open .config-btn {
@@ -78,4 +78,95 @@
 .config-menu.open .config-card:nth-child(5) {
     transform: translateY(8.9rem) rotate(-30deg) scale(1);
     transition-delay: 0.29s;
+}
+
+.theme-panel {
+    position: fixed;
+    top: 6.5rem;
+    right: 3%;
+    z-index: 20;
+    width: min(16rem, 84vw);
+    padding: 1rem;
+    border: 2px solid var(--color-text);
+    border-radius: 1rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    box-shadow: 3px 4px 0 var(--color-shadow);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-0.6rem) scale(0.96);
+    transition: opacity 0.2s ease-out, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.theme-panel.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+.theme-panel h2,
+.theme-card p {
+    margin: 0;
+}
+
+.theme-panel h2 {
+    font-family: var(--font-main);
+    font-size: 2rem;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 1px 1px 0 var(--color-shadow);
+}
+
+.theme-close {
+    float: right;
+    margin-top: 0.15rem;
+    border: none;
+    background: none;
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-weight: 900;
+    text-decoration: underline;
+    cursor: pointer;
+    transition: transform 0.18s ease-out, color 0.18s ease-out;
+}
+
+.theme-close:hover {
+    color: var(--color-shadow);
+    transform: translateY(-1px);
+}
+
+.theme-close:active {
+    transform: translateY(1px) scale(0.97);
+}
+
+.theme-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    margin-top: 1rem;
+    padding: 0.65rem;
+    border: 2px solid var(--color-text);
+    border-radius: 0.7rem;
+    background: var(--color-input-bg);
+    color: var(--color-on-input);
+}
+
+.theme-toggle {
+    min-width: 3.4rem;
+    padding: 0.28rem 0.5rem;
+    border: 2px solid var(--color-text);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+.theme-toggle.is-on {
+    background: var(--color-text);
+    color: var(--color-input-bg);
 }
