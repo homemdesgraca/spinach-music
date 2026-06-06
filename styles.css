@@ -76,6 +76,7 @@ body {
     left: 3%;
     bottom: 1.5rem;
     width: fit-content;
+    min-width: min(18rem, 82vw);
     max-width: min(34rem, 82vw);
     min-height: 3.6rem;
     padding: 0.55rem 1.05rem 0.55rem 0.85rem;
@@ -89,8 +90,8 @@ body {
     box-shadow: none;
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 0.75rem;
+    justify-content: space-between;
+    gap: 1rem;
     overflow: visible;
     transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), max-width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     animation: slide-in-bottom 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -114,16 +115,12 @@ body {
     z-index: 2;
 }
 
-.player-controls {
+.player-controls,
+.player-progress-pill {
     position: absolute;
     right: 0;
-    bottom: 0.35rem;
     z-index: 0;
-    display: flex;
-    gap: 0.45rem;
-    padding: 0.35rem 0.5rem;
     border: 2px solid var(--color-text);
-    border-radius: 0.8rem;
     background: var(--color-surface);
     box-shadow: 2px 3px 0 var(--color-shadow);
     visibility: hidden;
@@ -133,8 +130,37 @@ body {
     transition: opacity 0.22s ease-out 0.35s, bottom 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.35s, transform 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.35s, visibility 0s linear 0.67s;
 }
 
+.player-controls {
+    bottom: 0.35rem;
+    box-sizing: border-box;
+    width: 12.25rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.45rem;
+    padding: 0.35rem 0.55rem;
+    border-radius: 0.8rem;
+}
+
+.player-progress-pill {
+    bottom: 0.1rem;
+    box-sizing: border-box;
+    width: 12.25rem;
+    padding: 0.38rem 0.62rem;
+    border-radius: 999px;
+}
+
 .now-playing-bar:hover .player-controls,
 .player-controls:hover {
+    bottom: calc(100% + 2.45rem);
+    visibility: visible;
+    opacity: 1;
+    transform: scale(1);
+    transition-delay: 0s;
+}
+
+.now-playing-bar:hover .player-progress-pill,
+.player-controls:hover + .player-progress-pill,
+.player-progress-pill:hover {
     bottom: calc(100% + 0.45rem);
     visibility: visible;
     opacity: 1;
@@ -172,7 +198,110 @@ body {
     color: var(--color-input-bg);
 }
 
+.progress-time-bubble {
+    position: absolute;
+    left: var(--bubble-left, 0%);
+    bottom: calc(100% + 0.32rem);
+    padding: 0.14rem 0.38rem;
+    border: 2px solid var(--color-text);
+    border-radius: 999px;
+    background: var(--color-input-bg);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+    box-shadow: 1px 2px 0 var(--color-shadow);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(0.18rem) scale(0.92);
+    transition: opacity 0.14s ease-out, transform 0.14s ease-out;
+}
+
+.player-progress-pill:hover .progress-time-bubble,
+.player-progress-pill:focus-within .progress-time-bubble {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+}
+
+#now-playing-progress {
+    appearance: none;
+    display: block;
+    width: 100%;
+    height: 0.78rem;
+    margin: 0;
+    background: transparent;
+    accent-color: var(--color-text);
+    cursor: ew-resize;
+}
+
+#now-playing-progress:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+#now-playing-progress::-webkit-slider-runnable-track {
+    height: 0.42rem;
+    border: 1px solid var(--color-text);
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--color-text) var(--progress, 0%), var(--color-input-bg) var(--progress, 0%));
+}
+
+#now-playing-progress::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.22rem;
+    height: 0.72rem;
+    margin-top: -0.2rem;
+    border: 2px solid var(--color-text);
+    border-radius: 0.38rem;
+    background:
+        repeating-linear-gradient(135deg, rgba(11, 93, 30, 0.32) 0 0.08rem, transparent 0.08rem 0.18rem),
+        repeating-linear-gradient(45deg, transparent 0 0.22rem, rgba(216, 243, 220, 0.75) 0.22rem 0.3rem),
+        var(--color-surface);
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+#now-playing-progress:active::-webkit-slider-thumb {
+    transform: scaleX(1.08);
+}
+
+#now-playing-progress::-moz-range-track {
+    height: 0.42rem;
+    border: 1px solid var(--color-text);
+    border-radius: 999px;
+    background: var(--color-input-bg);
+}
+
+#now-playing-progress::-moz-range-progress {
+    height: 0.42rem;
+    border-radius: 999px;
+    background: var(--color-text);
+}
+
+#now-playing-progress::-moz-range-thumb {
+    width: 1.05rem;
+    height: 0.54rem;
+    transform: translateY(-1px);
+    border: 2px solid var(--color-text);
+    border-radius: 0.38rem;
+    background:
+        repeating-linear-gradient(135deg, rgba(11, 93, 30, 0.32) 0 0.08rem, transparent 0.08rem 0.18rem),
+        repeating-linear-gradient(45deg, transparent 0 0.22rem, rgba(216, 243, 220, 0.75) 0.22rem 0.3rem),
+        var(--color-surface);
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+#now-playing-progress:active::-moz-range-thumb {
+    transform: scaleX(1.08);
+}
+
 .now-playing-copy {
+    flex: 1 1 auto;
     min-width: 0;
     max-width: min(18rem, 48vw);
     display: flex;
@@ -191,6 +320,7 @@ body {
 .now-playing-disc {
     position: relative;
     flex: 0 0 auto;
+    margin-left: auto;
     width: 2.25rem;
     height: 2.25rem;
     border: 2px solid var(--color-text);

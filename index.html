@@ -72,6 +72,10 @@
                 <button class="player-control" type="button" data-mpris-action="toggle" aria-pressed="false">play</button>
                 <button class="player-control" type="button" data-mpris-action="next">next</button>
             </div>
+            <div class="player-progress-pill" aria-label="Song progress">
+                <span class="progress-time-bubble" id="progress-time-bubble">0:00</span>
+                <input id="now-playing-progress" type="range" min="0" max="100" value="0" step="1" aria-label="song progress">
+            </div>
             <section class="now-playing-status-pill" aria-label="Now playing update status">
                 <span id="now-playing-timer">next check in 3s</span>
             </section>
@@ -79,7 +83,7 @@
 
         <script src="menu.js"></script>
         <script src="navidrome.js?v=8"></script>
-        <script src="now-playing.js?v=13"></script>
+        <script src="now-playing.js?v=15"></script>
     </body>
 
 </html>

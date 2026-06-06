@@ -4,6 +4,8 @@ const nowPlayingTitle = document.querySelector('#now-playing-title');
 const nowPlayingMeta = document.querySelector('#now-playing-meta');
 const nowPlayingCover = document.querySelector('#now-playing-cover');
 const nowPlayingTimer = document.querySelector('#now-playing-timer');
+const nowPlayingProgress = document.querySelector('#now-playing-progress');
+const progressTimeBubble = document.querySelector('#progress-time-bubble');
 const nowPlayingTitleLine = document.querySelector('.now-playing-title-line');
 const playerControls = document.querySelectorAll('.player-control');
 const playPauseControl = document.querySelector('[data-mpris-action="toggle"]');
@@ -19,6 +21,8 @@ let lastCoverUrl = '';
 let titleMarqueeAnimation;
 let titleMarqueeTimeout;
 let titleMarqueeToken = 0;
+let isScrubbingProgress = false;
+let currentDuration = 0;
 
 const normalizePlaybackState = (state) => {
     const normalized = String(state || '').toLowerCase();
@@ -47,6 +51,34 @@ const formatPlaybackTime = (seconds) => {
 };
 
 const formatSongMeta = (album, artist) => [album, artist].filter(Boolean).join(', ');
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const setProgressBubble = (seconds, percent, bubbleLeft = `${clamp(percent, 0, 100)}%`) => {
+    if (!progressTimeBubble) {
+        return;
+    }
+
+    progressTimeBubble.textContent = formatPlaybackTime(seconds);
+    progressTimeBubble.style.setProperty('--bubble-left', bubbleLeft);
+};
+
+const setProgressSlider = (position, duration) => {
+    if (!nowPlayingProgress || isScrubbingProgress) {
+        return;
+    }
+
+    const hasDuration = Number.isFinite(duration) && duration > 0;
+    const safePosition = Number.isFinite(position) ? Math.max(0, position) : 0;
+    const progressPercent = hasDuration ? Math.min(100, (safePosition / duration) * 100) : 0;
+
+    currentDuration = hasDuration ? duration : 0;
+    nowPlayingProgress.disabled = !hasDuration;
+    nowPlayingProgress.max = hasDuration ? String(Math.floor(duration)) : '100';
+    nowPlayingProgress.value = hasDuration ? String(Math.min(Math.floor(safePosition), Math.floor(duration))) : '0';
+    nowPlayingProgress.style.setProperty('--progress', `${progressPercent}%`);
+    setProgressBubble(safePosition, progressPercent);
+};
 
 const stopTitleMarquee = () => {
     titleMarqueeToken += 1;
@@ -161,10 +193,12 @@ const setMprisSong = (data) => {
 
     setPlaybackState(state);
     nowPlayingTimer.textContent = `${formatPlaybackTime(data.position)} / ${formatPlaybackTime(data.duration)}`;
+    setProgressSlider(data.position, data.duration);
 
     if (!hasSong || state === 'stopped') {
         lastTrackId = '';
         lastCoverUrl = '';
+        setProgressSlider(null, null);
         setNowPlayingText('nothing playing', 'empty');
         return;
     }
@@ -201,15 +235,23 @@ const fetchMprisSong = async () => {
     } catch {
         setPlaybackState('stopped');
         nowPlayingTimer.textContent = 'mpris unavailable';
+        setProgressSlider(null, null);
         setNowPlayingText('nothing playing', 'empty');
     } finally {
         isFetchingMpris = false;
     }
 };
 
-const sendMprisControl = async (action) => {
+const sendMprisControl = async (action, params = {}) => {
     try {
-        await fetch(`${MPRIS_CONTROL_URL}?action=${encodeURIComponent(action)}`, { cache: 'no-store' });
+        const controlUrl = new URL(MPRIS_CONTROL_URL, window.location.origin);
+        controlUrl.searchParams.set('action', action);
+
+        Object.entries(params).forEach(([key, value]) => {
+            controlUrl.searchParams.set(key, value);
+        });
+
+        await fetch(controlUrl.toString(), { cache: 'no-store' });
         fetchMprisSong();
     } catch {
         nowPlayingTimer.textContent = 'mpris control failed';
@@ -221,6 +263,44 @@ playerControls.forEach((control) => {
         sendMprisControl(control.dataset.mprisAction);
     });
 });
+
+if (nowPlayingProgress) {
+    const updateProgressPreview = (clientX) => {
+        const duration = currentDuration || Number.parseFloat(nowPlayingProgress.max) || 0;
+
+        if (!duration || nowPlayingProgress.disabled) {
+            setProgressBubble(0, 0);
+            return;
+        }
+
+        const rect = nowPlayingProgress.getBoundingClientRect();
+        const pillRect = nowPlayingProgress.parentElement.getBoundingClientRect();
+        const percent = clamp(((clientX - rect.left) / rect.width) * 100, 0, 100);
+        const bubbleLeft = `${clamp(clientX - pillRect.left, 0, pillRect.width)}px`;
+        const seconds = (percent / 100) * duration;
+
+        setProgressBubble(seconds, percent, bubbleLeft);
+    };
+
+    nowPlayingProgress.addEventListener('pointermove', (event) => {
+        updateProgressPreview(event.clientX);
+    });
+
+    nowPlayingProgress.addEventListener('input', () => {
+        isScrubbingProgress = true;
+        const max = Number.parseFloat(nowPlayingProgress.max) || 0;
+        const value = Number.parseFloat(nowPlayingProgress.value) || 0;
+        const progressPercent = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+        nowPlayingProgress.style.setProperty('--progress', `${progressPercent}%`);
+        setProgressBubble(value, progressPercent);
+    });
+
+    nowPlayingProgress.addEventListener('change', () => {
+        const position = Number.parseFloat(nowPlayingProgress.value) || 0;
+        isScrubbingProgress = false;
+        sendMprisControl('seek', { position: String(position) });
+    });
+}
 
 window.addEventListener('resize', queueTitleMarquee);
 

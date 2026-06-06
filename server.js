@@ -114,7 +114,22 @@ const sendMprisArt = async (response) => {
 };
 
 const sendMprisControl = async (request, response) => {
-    const action = new URL(request.url, `http://${request.headers.host}`).searchParams.get('action');
+    const searchParams = new URL(request.url, `http://${request.headers.host}`).searchParams;
+    const action = searchParams.get('action');
+
+    if (action === 'seek') {
+        const position = Number.parseFloat(searchParams.get('position'));
+
+        if (!Number.isFinite(position) || position < 0) {
+            sendJson(response, 400, { error: 'bad seek position' });
+            return;
+        }
+
+        await runPlayerctl(['position', String(position)]);
+        sendJson(response, 200, { ok: true });
+        return;
+    }
+
     const command = {
         previous: 'previous',
         back: 'previous',
