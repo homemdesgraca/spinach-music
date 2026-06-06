@@ -81,6 +81,17 @@ const formatSongMeta = (album, artist) => ({
     artist: artist || '',
 });
 
+const formatCoverIdentity = (data, fallbackTrackId) => {
+    const album = String(data.album || '').trim().toLowerCase();
+    const artist = String(data.artist || '').trim().toLowerCase();
+
+    if (album || artist) {
+        return `album:${artist}|${album}`;
+    }
+
+    return data.artUrl || fallbackTrackId;
+};
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const mixColor = (color, target, amount) => color.map((channel, index) => Math.round(channel + (target[index] - channel) * amount));
 const colorToRgb = (color) => `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
@@ -455,7 +466,9 @@ const setNowPlayingText = (title, state = 'empty', coverUrl = '', meta = {}) => 
     currentCoverUrl = coverUrl;
 
     if (coverUrl) {
-        nowPlayingCover.src = coverUrl;
+        if (nowPlayingCover.getAttribute('src') !== coverUrl) {
+            nowPlayingCover.src = coverUrl;
+        }
     } else {
         nowPlayingCover.removeAttribute('src');
     }
@@ -492,7 +505,7 @@ const setMprisSong = (data) => {
     }
 
     const nextTrackId = data.trackId || [data.title, data.artist, data.album, data.duration].join('|');
-    const coverIdentity = data.artUrl || nextTrackId;
+    const coverIdentity = formatCoverIdentity(data, nextTrackId);
     const coverUrl = data.coverUrl ? `${data.coverUrl}?art=${encodeURIComponent(coverIdentity)}` : '';
 
     if (nextTrackId !== lastTrackId || coverUrl !== lastCoverUrl) {
