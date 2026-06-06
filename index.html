@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+    <head>
+
+        <title>Spinach Music</title>
+        <link rel="stylesheet" href="styles.css">
+        <link rel="stylesheet" href="config-menu.css">
+        <link rel="stylesheet" href="connections-panel.css">
+
+    </head>
+
+    <body>
+        <div class="config-menu">
+            <button class="config-btn" aria-label="Open settings" aria-expanded="false">⚙</button>
+            <button class="config-card">theme</button>
+            <button class="config-card">sound</button>
+            <button class="config-card connections-btn" type="button">connections</button>
+            <button class="config-card">about</button>
+        </div>
+
+        <section class="connections-panel" aria-hidden="true">
+            <button class="panel-close" type="button">close</button>
+            <h2>
+                connections
+                <span class="wifi-loop" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </h2>
+            <div class="connection-card">
+                <h3>Navidrome / Subsonic</h3>
+                <label>
+                    server url
+                    <input id="navidrome-url" type="text" placeholder="http://127.0.0.1:4533/" value="http://127.0.0.1:4533/">
+                </label>
+                <label>
+                    username
+                    <input id="navidrome-user" type="text" placeholder="your username">
+                </label>
+                <label>
+                    password
+                    <input id="navidrome-pass" type="password" placeholder="your password">
+                </label>
+                <button class="connection-connect" id="navidrome-connect" type="button">connect</button>
+                <p class="connection-status navidrome-status" id="navidrome-status" aria-live="polite"></p>
+            </div>
+        </section>
+
+        <div class="top-section">
+            <h1 class="title-txt">spinach music</h1>
+            <p class="subtitle-txt">music is life</p>
+            <div class="library-stats" id="library-stats" aria-live="polite">
+                <span id="artist-count">0 artists</span>
+                <span id="album-count">0 albums</span>
+            </div>
+        </div>
+
+        <section class="now-playing-bar is-empty" aria-label="Current playing song">
+            <img id="now-playing-cover" alt="" aria-hidden="true">
+            <span class="now-playing-copy">
+                <span class="now-playing-title-line">
+                    <span id="now-playing-title">nothing playing</span>
+                </span>
+                <span id="now-playing-meta"></span>
+            </span>
+            <span class="now-playing-disc" aria-hidden="true">
+                <span class="now-playing-face">:&lt;</span>
+            </span>
+            <div class="player-controls" aria-label="Player controls">
+                <button class="player-control" type="button" data-mpris-action="previous">back</button>
+                <button class="player-control" type="button" data-mpris-action="toggle" aria-pressed="false">play</button>
+                <button class="player-control" type="button" data-mpris-action="next">next</button>
+            </div>
+            <section class="now-playing-status-pill" aria-label="Now playing update status">
+                <span id="now-playing-timer">next check in 3s</span>
+            </section>
+        </section>
+
+        <script src="menu.js"></script>
+        <script src="navidrome.js?v=8"></script>
+        <script src="now-playing.js?v=13"></script>
+    </body>
+
+</html>
