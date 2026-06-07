@@ -173,7 +173,7 @@ const fetchNavidromeLyrics = async (songData, signal) => {
     const response = await fetch(url.toString(), { cache: 'no-store', signal });
     const payload = await response.json();
 
-    if (!response.ok) {
+    if (!response.ok || payload?.found === false || payload?.ok === false) {
         throw new Error(payload?.error || 'navidrome lyrics not found');
     }
 
@@ -188,12 +188,13 @@ const fetchLrclibLyrics = async (songData, signal) => {
     url.searchParams.set('duration', String(songData.duration || ''));
 
     const response = await fetch(url.toString(), { cache: 'no-store', signal });
-    if (!response.ok) {
-        throw new Error('lyrics not found');
+    const payload = await response.json();
+    if (!response.ok || payload?.found === false || payload?.ok === false) {
+        throw new Error(payload?.error || 'lyrics not found');
     }
 
     return {
-        ...await response.json(),
+        ...payload,
         source: 'lrclib',
     };
 };
@@ -347,69 +348,55 @@ const fetchLyrics = async (force = false) => {
         setLyricsStatus('fetching synced lyrics...');
         lyricsEntries = [];
         activeLyricsIndex = -1;
-        if (!isLyricsDrawerOpen()) {
-            renderLyrics([]);
-        }
+        renderLyrics([], '');
 
-        const navidromeLyrics = await fetchNavidromeLyrics(songData, lyricsAbortController.signal).catch((error) => {
-            if (error?.name === 'AbortError') {
-                throw error;
+        const pendingLyricsSources = new Map([
+            ['navidrome', fetchNavidromeLyrics(songData, lyricsAbortController.signal)
+                .then((lyrics) => ({ source: 'navidrome', lyrics }))
+                .catch((error) => ({ source: 'navidrome', error }))],
+            ['lrclib', fetchLrclibLyrics(songData, lyricsAbortController.signal)
+                .then((lyrics) => ({ source: 'lrclib', lyrics }))
+                .catch((error) => ({ source: 'lrclib', error }))],
+        ]);
+        let plainLyricsCandidate = null;
+
+        while (pendingLyricsSources.size) {
+            const result = await Promise.race([...pendingLyricsSources.values()]);
+            pendingLyricsSources.delete(result.source);
+
+            if (result.error?.name === 'AbortError') {
+                throw result.error;
             }
-            return null;
-        });
-        if (fetchToken !== lyricsFetchToken) {
-            return;
-        }
 
-        const navidromeSynced = parseSyncedLyrics(navidromeLyrics?.syncedLyrics || '');
-        if (navidromeSynced.length) {
-            lyricsEntries = navidromeSynced;
-            renderLyrics(lyricsEntries, navidromeLyrics.plainLyrics || '', { delayShrink: true });
-            lastLyricsKey = lyricsKey;
-            setLyricsStatus('synced from navidrome');
-            syncLyricsToPosition(songData.position);
-            return;
-        }
-
-        if (navidromeLyrics?.plainLyrics) {
-            renderLyrics([], navidromeLyrics.plainLyrics || '', { delayShrink: true });
-            setLyricsStatus('plain lyrics from navidrome, checking synced lyrics...');
-        }
-
-        const lrclibLyrics = await fetchLrclibLyrics(songData, lyricsAbortController.signal).catch((error) => {
-            if (error?.name === 'AbortError') {
-                throw error;
+            if (fetchToken !== lyricsFetchToken) {
+                return;
             }
-            return null;
-        });
-        if (fetchToken !== lyricsFetchToken) {
-            return;
+
+            const syncedEntries = parseSyncedLyrics(result.lyrics?.syncedLyrics || '');
+            if (syncedEntries.length) {
+                lyricsEntries = syncedEntries;
+                renderLyrics(lyricsEntries, result.lyrics.plainLyrics || '', { delayShrink: true });
+                lastLyricsKey = lyricsKey;
+                setLyricsStatus(`synced from ${result.source}`);
+                syncLyricsToPosition(songData.position);
+                return;
+            }
+
+            if (result.lyrics?.plainLyrics) {
+                plainLyricsCandidate = result;
+                lyricsEntries = [];
+                renderLyrics([], result.lyrics.plainLyrics, { delayShrink: true });
+                setLyricsStatus(`plain lyrics from ${result.source}${pendingLyricsSources.size ? ', checking synced lyrics...' : ''}`);
+            }
         }
 
-        const lrclibSynced = parseSyncedLyrics(lrclibLyrics?.syncedLyrics || '');
-        if (lrclibSynced.length) {
-            lyricsEntries = lrclibSynced;
-            renderLyrics(lyricsEntries, lrclibLyrics.plainLyrics || '', { delayShrink: true });
+        if (plainLyricsCandidate) {
             lastLyricsKey = lyricsKey;
-            setLyricsStatus('synced from lrclib');
-            syncLyricsToPosition(songData.position);
+            setLyricsStatus(`plain lyrics from ${plainLyricsCandidate.source}`);
             return;
         }
 
-        if (lrclibLyrics) {
-            lyricsEntries = [];
-            renderLyrics([], lrclibLyrics.plainLyrics || '', { delayShrink: true });
-            lastLyricsKey = lyricsKey;
-            setLyricsStatus('plain lyrics from lrclib');
-            return;
-        }
-
-        if (!navidromeLyrics?.plainLyrics) {
-            throw new Error('lyrics not found');
-        }
-
-        lastLyricsKey = lyricsKey;
-        setLyricsStatus('plain lyrics from navidrome');
+        throw new Error('lyrics not found');
     } catch (error) {
         if (error?.name === 'AbortError') {
             return;

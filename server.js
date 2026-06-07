@@ -12,6 +12,8 @@ const ROOT = __dirname;
 const COVER_CACHE_DIR = join(ROOT, '.cache', 'covers');
 const COVER_ART_SIZE = 768;
 const COVER_BACKGROUND_SIZE = 1600;
+const LYRICS_CACHE_TTL = 1000 * 60 * 60 * 24;
+const lyricsCache = new Map();
 const HAS_FILE_COMMAND = (() => {
     try {
         execFileSync('file', ['--version'], { stdio: 'ignore' });
@@ -140,6 +142,50 @@ const sendJson = (response, statusCode, payload) => {
 };
 
 const fetchRemoteJson = (url) => runCurlJson(url);
+
+const firstFulfilled = (promises) => new Promise((resolve, reject) => {
+    if (!promises.length) {
+        reject(new Error('no requests'));
+        return;
+    }
+
+    let pending = promises.length;
+    const errors = [];
+
+    promises.forEach((promise, index) => {
+        Promise.resolve(promise).then(resolve).catch((error) => {
+            errors[index] = error;
+            pending -= 1;
+
+            if (!pending) {
+                reject(errors.find(Boolean) || new Error('all requests failed'));
+            }
+        });
+    });
+});
+
+const getLyricsCacheKey = ({ title, artist, album, duration }) => [title, artist, album, Math.round(duration || 0)]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .join('|');
+
+const getCachedLyrics = (key) => {
+    const cached = lyricsCache.get(key);
+
+    if (!cached) {
+        return null;
+    }
+
+    if (Date.now() - cached.cachedAt > LYRICS_CACHE_TTL) {
+        lyricsCache.delete(key);
+        return null;
+    }
+
+    return cached.payload;
+};
+
+const setCachedLyrics = (key, payload) => {
+    lyricsCache.set(key, { cachedAt: Date.now(), payload });
+};
 
 const buildLyricsParams = ({ title, artist, album, duration }, includeDuration = true) => {
     const params = new URLSearchParams({
@@ -503,7 +549,12 @@ const sendNavidromeCacheCover = async (request, response) => {
         const { palette } = await cacheRemoteArt(artUrl, cacheKey);
         sendJson(response, 200, { ok: true, palette });
     } catch (error) {
-        sendJson(response, error?.message === 'missing navidrome connection' ? 400 : 404, { error: error?.message || 'cover not found' });
+        if (error?.message === 'missing navidrome connection') {
+            sendJson(response, 400, { ok: false, error: error.message });
+            return;
+        }
+
+        sendJson(response, 200, { ok: false, found: false, error: error?.message || 'cover not found' });
     }
 };
 
@@ -594,7 +645,7 @@ const sendNavidromeLyrics = async (request, response) => {
             return;
         }
 
-        sendJson(response, 404, { error: 'lyrics not found' });
+        sendJson(response, 200, { ok: false, found: false, error: 'lyrics not found' });
     } catch {
         try {
             const plain = await fetchRemoteJson(buildNavidromeUrl(connection, 'getLyrics', {
@@ -614,7 +665,7 @@ const sendNavidromeLyrics = async (request, response) => {
             }
         } catch {}
 
-        sendJson(response, 404, { error: 'lyrics not found' });
+        sendJson(response, 200, { ok: false, found: false, error: 'lyrics not found' });
     }
 };
 
@@ -630,50 +681,62 @@ const sendLyrics = async (request, response) => {
         return;
     }
 
-    const artistVariants = [...new Set([artist, getPrimaryArtist(artist)])];
-
-    for (const artistName of artistVariants) {
-        const params = buildLyricsParams({ title, artist: artistName, album, duration });
-
-        try {
-            sendJson(response, 200, await fetchRemoteJson(`https://lrclib.net/api/get-cached?${params}`));
-            return;
-        } catch {}
+    const lyricsCacheKey = getLyricsCacheKey({ title, artist, album, duration });
+    const cachedLyrics = getCachedLyrics(lyricsCacheKey);
+    if (cachedLyrics) {
+        sendJson(response, 200, { ...cachedLyrics, cached: true });
+        return;
     }
 
-    for (const artistName of artistVariants) {
-        const params = buildLyricsParams({ title, artist: artistName, album, duration });
+    const artistVariants = [...new Set([artist, getPrimaryArtist(artist)].filter(Boolean))];
+    const fetchAndCache = async (payloadPromise) => {
+        const payload = await payloadPromise;
+        setCachedLyrics(lyricsCacheKey, payload);
+        sendJson(response, 200, payload);
+    };
 
-        try {
-            sendJson(response, 200, await fetchRemoteJson(`https://lrclib.net/api/get?${params}`));
-            return;
-        } catch {}
-    }
+    try {
+        await fetchAndCache(firstFulfilled(artistVariants.map((artistName) => {
+            const params = buildLyricsParams({ title, artist: artistName, album, duration });
+            return fetchRemoteJson(`https://lrclib.net/api/get-cached?${params}`);
+        })));
+        return;
+    } catch {}
 
-    for (const artistName of artistVariants) {
-        const params = buildLyricsParams({ title, artist: artistName, album, duration }, false);
+    try {
+        await fetchAndCache(firstFulfilled(artistVariants.map((artistName) => {
+            const params = buildLyricsParams({ title, artist: artistName, album, duration });
+            return fetchRemoteJson(`https://lrclib.net/api/get?${params}`);
+        })));
+        return;
+    } catch {}
 
-        try {
+    try {
+        await fetchAndCache(firstFulfilled(artistVariants.map(async (artistName) => {
+            const params = buildLyricsParams({ title, artist: artistName, album, duration }, false);
             const match = pickLyricsMatch(await fetchRemoteJson(`https://lrclib.net/api/search?${params}`), duration);
 
-            if (match) {
-                sendJson(response, 200, match);
-                return;
+            if (!match) {
+                throw new Error('lyrics not found');
             }
-        } catch {}
-    }
+
+            return match;
+        })));
+        return;
+    } catch {}
 
     try {
         const params = new URLSearchParams({ q: `${title} ${artist} ${album}`.trim() });
         const match = pickLyricsMatch(await fetchRemoteJson(`https://lrclib.net/api/search?${params}`), duration);
 
         if (match) {
+            setCachedLyrics(lyricsCacheKey, match);
             sendJson(response, 200, match);
             return;
         }
     } catch {}
 
-    sendJson(response, 404, { error: 'lyrics not found' });
+    sendJson(response, 200, { ok: false, found: false, error: 'lyrics not found' });
 };
 
 const sendRemoteArt = (artUrl, response) => {
@@ -1009,6 +1072,12 @@ const sendFile = async (request, response) => {
 
 const server = http.createServer(async (request, response) => {
     const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+
+    if (pathname === '/favicon.ico') {
+        response.writeHead(204);
+        response.end();
+        return;
+    }
 
     if (pathname === '/mpris') {
         sendJson(response, 200, await readMpris());

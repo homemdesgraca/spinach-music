@@ -257,7 +257,7 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
 
                 const response = await fetch(url, { cache: 'no-store' });
                 const payload = await response.json().catch(() => ({}));
-                if (!response.ok) {
+                if (!response.ok || payload?.ok === false || payload?.found === false) {
                     throw new Error('cover unavailable');
                 }
 
