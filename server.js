@@ -297,7 +297,7 @@ const sendNavidromeLibrary = async (request, response) => {
     }
 };
 
-const sendNavidromeCover = async (request, response) => {
+const getNavidromeCoverTarget = async (request) => {
     const searchParams = new URL(request.url, `http://${request.headers.host}`).searchParams;
     const connection = getNavidromeConnection(searchParams);
     const id = firstLine(searchParams.get('id'));
@@ -306,42 +306,58 @@ const sendNavidromeCover = async (request, response) => {
     const type = firstLine(searchParams.get('type'));
 
     if (!connection.url || !connection.username || !connection.password) {
-        sendJson(response, 400, { error: 'missing navidrome connection' });
-        return;
+        throw new Error('missing navidrome connection');
     }
 
     const cachePrefix = `${normalizeServerUrl(connection.url).origin}|${connection.username}|${type}`;
 
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-        await sendCachedRemoteArt(imageUrl, response, `${cachePrefix}|image|${imageUrl}`);
-        return;
+        return { artUrl: imageUrl, cacheKey: `${cachePrefix}|image|${imageUrl}` };
     }
 
     if (coverArt) {
-        await sendCachedRemoteArt(buildNavidromeUrl(connection, 'getCoverArt', {
-            id: coverArt,
-            size: 512,
-        }).toString(), response, `${cachePrefix}|coverArt|${coverArt}`);
-        return;
+        return {
+            artUrl: buildNavidromeUrl(connection, 'getCoverArt', {
+                id: coverArt,
+                size: 512,
+            }).toString(),
+            cacheKey: `${cachePrefix}|coverArt|${coverArt}`,
+        };
     }
 
     if (type === 'artist' && id) {
-        try {
-            const payload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getArtistInfo2', {
-                id,
-                count: 0,
-            }).toString());
-            const info = payload?.['subsonic-response']?.artistInfo2 || {};
-            const remoteImage = firstLine(info.largeImageUrl || info.mediumImageUrl || info.smallImageUrl || '');
+        const payload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getArtistInfo2', {
+            id,
+            count: 0,
+        }).toString());
+        const info = payload?.['subsonic-response']?.artistInfo2 || {};
+        const remoteImage = firstLine(info.largeImageUrl || info.mediumImageUrl || info.smallImageUrl || '');
 
-            if (remoteImage) {
-                await sendCachedRemoteArt(remoteImage, response, `${cachePrefix}|artist|${id}|${remoteImage}`);
-                return;
-            }
-        } catch {}
+        if (remoteImage) {
+            return { artUrl: remoteImage, cacheKey: `${cachePrefix}|artist|${id}|${remoteImage}` };
+        }
     }
 
-    sendJson(response, 404, { error: 'cover not found' });
+    throw new Error('cover not found');
+};
+
+const sendNavidromeCover = async (request, response) => {
+    try {
+        const { artUrl, cacheKey } = await getNavidromeCoverTarget(request);
+        await sendCachedRemoteArt(artUrl, response, cacheKey);
+    } catch (error) {
+        sendJson(response, error?.message === 'missing navidrome connection' ? 400 : 404, { error: error?.message || 'cover not found' });
+    }
+};
+
+const sendNavidromeCacheCover = async (request, response) => {
+    try {
+        const { artUrl, cacheKey } = await getNavidromeCoverTarget(request);
+        await cacheRemoteArt(artUrl, cacheKey);
+        sendJson(response, 200, { ok: true });
+    } catch (error) {
+        sendJson(response, error?.message === 'missing navidrome connection' ? 400 : 404, { error: error?.message || 'cover not found' });
+    }
 };
 
 const resolveNavidromeSongId = async (connection, title, artist, album) => {
@@ -566,38 +582,51 @@ const fetchRemoteBinary = (remoteUrl, redirects = 4) => new Promise((resolve, re
     }).on('error', reject);
 });
 
-const sendCachedRemoteArt = async (artUrl, response, cacheKey) => {
+const getCoverCachePaths = (artUrl, cacheKey) => {
     const hash = createHash('sha256').update(cacheKey || artUrl).digest('hex');
-    const imagePath = join(COVER_CACHE_DIR, `${hash}.bin`);
-    const metaPath = join(COVER_CACHE_DIR, `${hash}.json`);
+    return {
+        imagePath: join(COVER_CACHE_DIR, `${hash}.bin`),
+        metaPath: join(COVER_CACHE_DIR, `${hash}.json`),
+    };
+};
+
+const cacheRemoteArt = async (artUrl, cacheKey) => {
+    const { imagePath, metaPath } = getCoverCachePaths(artUrl, cacheKey);
 
     try {
         const meta = JSON.parse(await readFile(metaPath, 'utf8'));
-        response.writeHead(200, {
-            'content-type': meta.contentType || 'image/jpeg',
-            'cache-control': 'public, max-age=31536000, immutable',
-        });
-        createReadStream(imagePath).pipe(response);
-        return;
+        return { imagePath, contentType: meta.contentType || 'image/jpeg', cached: true };
     } catch {}
 
-    try {
-        const { buffer, contentType } = await fetchRemoteBinary(artUrl);
-        if (!String(contentType).startsWith('image/')) {
-            throw new Error('remote art is not an image');
-        }
+    const { buffer, contentType } = await fetchRemoteBinary(artUrl);
+    if (!String(contentType).startsWith('image/')) {
+        throw new Error('remote art is not an image');
+    }
 
-        await mkdir(COVER_CACHE_DIR, { recursive: true });
-        await Promise.all([
-            writeFile(imagePath, buffer),
-            writeFile(metaPath, JSON.stringify({ contentType, cachedAt: new Date().toISOString() })),
-        ]);
+    await mkdir(COVER_CACHE_DIR, { recursive: true });
+    await Promise.all([
+        writeFile(imagePath, buffer),
+        writeFile(metaPath, JSON.stringify({ contentType, cachedAt: new Date().toISOString() })),
+    ]);
+
+    return { imagePath, contentType, cached: false, buffer };
+};
+
+const sendCachedRemoteArt = async (artUrl, response, cacheKey) => {
+    try {
+        const { imagePath, contentType, buffer } = await cacheRemoteArt(artUrl, cacheKey);
 
         response.writeHead(200, {
             'content-type': contentType,
             'cache-control': 'public, max-age=31536000, immutable',
         });
-        response.end(buffer);
+
+        if (buffer) {
+            response.end(buffer);
+            return;
+        }
+
+        createReadStream(imagePath).pipe(response);
     } catch {
         sendJson(response, 404, { error: 'art not found' });
     }
@@ -718,6 +747,11 @@ const server = http.createServer(async (request, response) => {
 
     if (pathname === '/navidrome/cover') {
         await sendNavidromeCover(request, response);
+        return;
+    }
+
+    if (pathname === '/navidrome/cache-cover') {
+        await sendNavidromeCacheCover(request, response);
         return;
     }
 

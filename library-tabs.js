@@ -10,6 +10,7 @@ const nowPlayingBar = document.querySelector('.now-playing-bar');
 const NAVIDROME_STORAGE_KEY = 'spinachMusic.navidromeConnection';
 const LIBRARY_ENDPOINT = '/navidrome/library';
 const COVER_ENDPOINT = '/navidrome/cover';
+const CACHE_COVER_ENDPOINT = '/navidrome/cache-cover';
 const CARD_COLORS = [
     ['#d8f3dc', '#40916c'],
     ['#b7e4c7', '#2d6a4f'],
@@ -56,6 +57,7 @@ let deckCardStep = 0;
 let deckBuffer = 0;
 let deckMode = '';
 let deckSlotCards = [];
+let deckBaseCards = [];
 let libraryMarqueeToken = 0;
 let coverWarmupQueue = Promise.resolve();
 let libraryDataRun = 0;
@@ -113,14 +115,14 @@ const buildLibraryUrl = (mode) => {
 
 const getCoverKey = (item) => `${item.type || 'item'}:${item.id || ''}:${item.coverArt || ''}:${item.imageUrl || ''}`;
 
-const buildCoverUrl = (item) => {
+const buildCoverUrl = (item, endpoint = COVER_ENDPOINT) => {
     const connection = loadNavidromeConnection();
 
     if (!connection?.url || !connection?.username || !connection?.password || (!item?.id && !item?.coverArt && !item?.imageUrl)) {
         return null;
     }
 
-    const url = new URL(COVER_ENDPOINT, window.location.origin);
+    const url = new URL(endpoint, window.location.origin);
     url.searchParams.set('url', connection.url);
     url.searchParams.set('username', connection.username);
     url.searchParams.set('password', connection.password);
@@ -165,6 +167,8 @@ const applyCoverToCards = (coverKey, coverUrl) => {
         if (!image) {
             image = document.createElement('img');
             image.alt = '';
+            image.loading = 'lazy';
+            image.decoding = 'async';
             image.setAttribute('aria-hidden', 'true');
             cover.append(image);
         }
@@ -202,7 +206,7 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
     const worker = async () => {
         while (queue.length) {
             const { item, key } = queue.shift();
-            const url = item.coverRequestUrl || buildCoverUrl(item)?.toString();
+            const url = item.coverCacheUrl || buildCoverUrl(item, CACHE_COVER_ENDPOINT)?.toString();
 
             try {
                 if (!url || dataRun !== libraryDataRun) {
@@ -214,19 +218,13 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
                     throw new Error('cover unavailable');
                 }
 
-                const blob = await response.blob();
-                if (!blob.type.startsWith('image/')) {
-                    throw new Error('not image');
-                }
-
                 if (dataRun !== libraryDataRun || run !== coverProgress.run) {
                     return;
                 }
 
-                const objectUrl = URL.createObjectURL(blob);
-                coverCache.set(key, objectUrl);
-                item.coverUrl = objectUrl;
-                applyCoverToCards(key, objectUrl);
+                coverCache.set(key, item.coverRequestUrl || '');
+                item.coverUrl = item.coverRequestUrl || '';
+                applyCoverToCards(key, item.coverUrl);
             } catch {
                 coverCache.set(key, '');
             } finally {
@@ -238,7 +236,7 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
         }
     };
 
-    await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(2, queue.length) }, worker));
 
     if (run === coverProgress.run && coverProgress.mode === mode) {
         coverProgress.active = false;
@@ -303,11 +301,13 @@ const fetchLibraryMode = async (mode, force = false) => {
 
         deckCards[mode] = (payload.items || []).map((item, index) => {
             const coverKey = getCoverKey(item);
+            const coverRequestUrl = buildCoverUrl(item)?.toString() || '';
             return {
                 ...item,
                 coverKey,
-                coverRequestUrl: buildCoverUrl(item)?.toString() || '',
-                coverUrl: coverCache.get(coverKey) || '',
+                coverRequestUrl,
+                coverCacheUrl: buildCoverUrl(item, CACHE_COVER_ENDPOINT)?.toString() || '',
+                coverUrl: coverCache.has(coverKey) ? (coverCache.get(coverKey) || '') : coverRequestUrl,
                 colors: getCardColors(item.title, index),
             };
         });
@@ -334,11 +334,6 @@ const resetLibraryDeckData = () => {
         libraryLoadState[mode] = 'idle';
     });
 
-    coverCache.forEach((coverUrl) => {
-        if (coverUrl) {
-            URL.revokeObjectURL(coverUrl);
-        }
-    });
     coverCache.clear();
     coverWarmupQueue = Promise.resolve();
     libraryDataRun += 1;
@@ -581,6 +576,8 @@ const createDeckCard = (item, index = 0) => {
     if (coverUrl) {
         const image = document.createElement('img');
         image.alt = '';
+        image.loading = 'lazy';
+        image.decoding = 'async';
         image.setAttribute('aria-hidden', 'true');
         image.src = coverUrl;
         coverElement.append(image);
@@ -607,16 +604,40 @@ const getDeckCardMetrics = () => {
 };
 
 const applyDeckTransform = () => {
-    if (!deckLoopWidth || !deckCardStep || !deckSlotCards.length) {
+    if (!deckLoopWidth || !deckCardStep || !deckSlotCards.length || !deckBaseCards.length) {
         return;
     }
 
+    const baseCount = deckBaseCards.length;
     const offset = modulo(deckCurrentOffset, deckLoopWidth);
+    const firstIndex = Math.floor(offset / deckCardStep);
+    const fractionalOffset = offset - (firstIndex * deckCardStep);
+    const bufferSlots = deckSlotCards.length > 1 ? Math.min(2, deckSlotCards.length - 1) : 0;
+    let changedContent = false;
 
-    deckSlotCards.forEach((card, index) => {
-        const x = modulo((index * deckCardStep) - offset + deckBuffer, deckLoopWidth) - deckBuffer;
-        card.style.transform = `translate3d(${x}px, 0, 0) rotate(${card.dataset.tilt})`;
+    deckSlotCards.forEach((card, slotIndex) => {
+        const slotPosition = slotIndex - bufferSlots;
+        const dataIndex = modulo(firstIndex + slotPosition, baseCount);
+        let activeCard = card;
+
+        if (activeCard.dataset.itemIndex !== String(dataIndex)) {
+            activeCard.querySelectorAll('.library-card-title-text').forEach(stopLibraryMarquee);
+            const nextCard = createDeckCard(deckBaseCards[dataIndex], dataIndex);
+            nextCard.dataset.itemIndex = String(dataIndex);
+            nextCard.dataset.slotIndex = String(slotIndex);
+            libraryDeckTrack.replaceChild(nextCard, activeCard);
+            deckSlotCards[slotIndex] = nextCard;
+            activeCard = nextCard;
+            changedContent = true;
+        }
+
+        const x = (slotPosition * deckCardStep) - fractionalOffset;
+        activeCard.style.transform = `translate3d(${x}px, 0, 0) rotate(${activeCard.dataset.tilt})`;
     });
+
+    if (changedContent) {
+        queueLibraryMarquees();
+    }
 };
 
 const stopLibraryMarquee = (content) => {
@@ -720,19 +741,22 @@ const measureDeckLoop = () => {
     }
 
     const { step } = getDeckCardMetrics();
-    const baseCards = getDeckCards(deckMode);
-    const baseCount = baseCards.length || 1;
+    deckBaseCards = getDeckCards(deckMode);
+    const baseCount = deckBaseCards.length || 1;
     const visibleWidth = libraryDeck.clientWidth || window.innerWidth;
     const minimumSlots = Math.ceil((visibleWidth + (step * 4)) / step);
-    const slotCount = baseCount === 1 ? 1 : Math.ceil(minimumSlots / baseCount) * baseCount;
+    const slotCount = baseCount === 1 ? 1 : Math.min(baseCount, minimumSlots);
 
     deckCardStep = step;
     deckBuffer = step * 2;
-    deckLoopWidth = Math.max(slotCount * step, visibleWidth + step);
+    deckLoopWidth = Math.max(baseCount * step, step);
 
+    stopLibraryMarquees();
     libraryDeckTrack.innerHTML = '';
     deckSlotCards = Array.from({ length: slotCount }, (_, index) => {
-        const card = createDeckCard(baseCards[index % baseCount], index);
+        const card = createDeckCard(deckBaseCards[index % baseCount], index);
+        card.dataset.itemIndex = '';
+        card.dataset.slotIndex = String(index);
         libraryDeckTrack.append(card);
         return card;
     });
