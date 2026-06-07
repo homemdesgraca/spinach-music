@@ -827,8 +827,8 @@ const startMarquee = (line, content, token, pause = 2000) => {
 
     const travelDistance = overflowDistance + 16;
     const endTransform = `translateX(-${travelDistance}px)`;
-    const travelDuration = Math.max(3500, travelDistance * 65);
-    const returnDuration = Math.max(900, travelDistance * 22);
+    const travelDuration = Math.max(1250, travelDistance * 23);
+    const returnDuration = Math.max(420, travelDistance * 8);
 
     content.classList.add('is-overflowing');
     content.style.transform = 'translateX(0)';
@@ -854,6 +854,7 @@ const startMarquee = (line, content, token, pause = 2000) => {
                 return;
             }
 
+            animation.cancel();
             content.style.transform = endTransform;
             const returnAnimation = content.animate([
                 { transform: endTransform },
@@ -871,7 +872,9 @@ const startMarquee = (line, content, token, pause = 2000) => {
                     return;
                 }
 
+                returnAnimation.cancel();
                 content.style.transform = 'translateX(0)';
+                marquees.delete(content);
                 requestAnimationFrame(() => startMarquee(line, content, token, pause));
             };
         };

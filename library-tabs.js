@@ -10,6 +10,7 @@ const nowPlayingBar = document.querySelector('.now-playing-bar');
 
 const NAVIDROME_STORAGE_KEY = 'spinachMusic.navidromeConnection';
 const LIBRARY_ENDPOINT = '/navidrome/library';
+const TRACKS_ENDPOINT = '/navidrome/tracks';
 const COVER_ENDPOINT = '/navidrome/cover';
 const CACHE_COVER_ENDPOINT = '/navidrome/cache-cover';
 const CARD_COLORS = [
@@ -25,18 +26,21 @@ const deckCards = {
     artists: [],
     albums: [],
     artistAlbums: [],
+    albumTracks: [],
 };
 
 const libraryLoadState = {
     artists: 'idle',
     albums: 'idle',
     artistAlbums: 'idle',
+    albumTracks: 'idle',
 };
 
 const libraryFetchControllers = {
     artists: null,
     albums: null,
     artistAlbums: null,
+    albumTracks: null,
 };
 
 const coverCache = new Map();
@@ -62,6 +66,9 @@ let deckCardStep = 0;
 let deckCardWidth = 0;
 let deckCardGap = 0;
 let deckCanScroll = true;
+let deckIsFinite = false;
+let deckFiniteStartX = 0;
+let deckMaxOffset = 0;
 let deckBuffer = 0;
 let deckMode = '';
 let deckSlotCards = [];
@@ -70,6 +77,7 @@ let libraryMarqueeToken = 0;
 let coverWarmupQueue = Promise.resolve();
 let libraryDataRun = 0;
 let artistAlbumContext = null;
+let albumTracksContext = null;
 let artistDeckReturnOffset = null;
 let deckDropAnimationPending = false;
 let deckDropRun = 0;
@@ -117,9 +125,21 @@ const hashText = (value) => String(value || '').split('').reduce((hash, char) =>
 
 const getCardColors = (title, index = 0) => CARD_COLORS[Math.abs(hashText(title) + index) % CARD_COLORS.length];
 
+const formatTrackDuration = (seconds) => {
+    const value = Number(seconds);
+
+    if (!Number.isFinite(value) || value <= 0) {
+        return 'track';
+    }
+
+    const minutes = Math.floor(value / 60);
+    const remaining = Math.floor(value % 60);
+    return `${minutes}:${String(remaining).padStart(2, '0')}`;
+};
+
 const getStatusCard = (mode) => {
     const state = libraryLoadState[mode];
-    const label = mode === 'artists' ? 'artists' : 'albums';
+    const label = mode === 'artists' ? 'artists' : mode === 'albumTracks' ? 'tracks' : 'albums';
 
     if (state === 'loading') {
         return { title: `loading ${label}`, subtitle: 'navidrome', countLabel: 'please wait', colors: ['#d8f3dc', '#52b788'], isStatus: true };
@@ -130,7 +150,7 @@ const getStatusCard = (mode) => {
     }
 
     if (state === 'empty') {
-        return { title: `no ${label} found`, subtitle: artistAlbumContext?.title || 'navidrome', countLabel: 'empty', colors: ['#95d5b2', '#40916c'], isStatus: true };
+        return { title: `no ${label} found`, subtitle: albumTracksContext?.title || artistAlbumContext?.title || 'navidrome', countLabel: 'empty', colors: ['#95d5b2', '#40916c'], isStatus: true };
     }
 
     return { title: 'connect navidrome', subtitle: 'open config', countLabel: 'needed', colors: ['#d8f3dc', '#40916c'], isStatus: true };
@@ -145,18 +165,26 @@ const buildLibraryUrl = (mode, context = null) => {
         return null;
     }
 
-    if (mode === 'artistAlbums' && !context?.id) {
+    if ((mode === 'artistAlbums' || mode === 'albumTracks') && !context?.id) {
         return null;
     }
 
-    const url = new URL(LIBRARY_ENDPOINT, window.location.origin);
-    url.searchParams.set('mode', mode);
+    const url = new URL(mode === 'albumTracks' ? TRACKS_ENDPOINT : LIBRARY_ENDPOINT, window.location.origin);
+    if (mode !== 'albumTracks') {
+        url.searchParams.set('mode', mode);
+    }
     url.searchParams.set('url', connection.url);
     url.searchParams.set('username', connection.username);
     url.searchParams.set('password', connection.password);
     if (mode === 'artistAlbums') {
         url.searchParams.set('artistId', context.id);
         url.searchParams.set('artistTitle', context.title || '');
+    }
+
+    if (mode === 'albumTracks') {
+        url.searchParams.set('id', context.id);
+        url.searchParams.set('type', 'album');
+        url.searchParams.set('title', context.title || '');
     }
     return url;
 };
@@ -186,7 +214,9 @@ const updateCoverProgress = () => {
         return;
     }
 
-    const noun = coverProgress.mode === 'artists' ? 'artist covers' : 'album covers';
+    const noun = coverProgress.mode === 'artists'
+        ? 'artist covers'
+        : coverProgress.mode === 'albumTracks' ? 'track covers' : 'album covers';
     const percent = coverProgress.total ? Math.round((coverProgress.done / coverProgress.total) * 100) : 0;
 
     libraryProgressText.textContent = coverProgress.active
@@ -363,9 +393,12 @@ const refreshDeckIfActive = (mode, options = {}) => {
 
 const fetchLibraryMode = async (mode, force = false, context = null) => {
     const requestRun = libraryDataRun;
-    const requestContext = mode === 'artistAlbums' ? (context || artistAlbumContext) : null;
+    const isContextMode = mode === 'artistAlbums' || mode === 'albumTracks';
+    const requestContext = mode === 'artistAlbums'
+        ? (context || artistAlbumContext)
+        : mode === 'albumTracks' ? (context || albumTracksContext) : null;
 
-    if (!force && mode !== 'artistAlbums' && (libraryLoadState[mode] === 'loaded' || libraryLoadState[mode] === 'loading')) {
+    if (!force && !isContextMode && (libraryLoadState[mode] === 'loaded' || libraryLoadState[mode] === 'loading')) {
         return;
     }
 
@@ -394,11 +427,26 @@ const fetchLibraryMode = async (mode, force = false, context = null) => {
             throw new Error(payload?.error || 'library failed');
         }
 
-        if (requestRun !== libraryDataRun || (mode === 'artistAlbums' && requestContext?.id !== artistAlbumContext?.id)) {
+        if (requestRun !== libraryDataRun
+            || (mode === 'artistAlbums' && requestContext?.id !== artistAlbumContext?.id)
+            || (mode === 'albumTracks' && requestContext?.id !== albumTracksContext?.id)) {
             return;
         }
 
-        deckCards[mode] = (payload.items || []).map((item, index) => {
+        const payloadItems = mode === 'albumTracks'
+            ? (payload.tracks || []).map((track, index) => ({
+                ...track,
+                title: track.title || `track ${index + 1}`,
+                subtitle: [track.artist || requestContext?.artist || '', track.album || requestContext?.title || '', formatTrackDuration(track.duration)]
+                    .filter(Boolean)
+                    .join(' · '),
+                tracks: 1,
+                countLabel: `#${track.track || index + 1}`,
+                type: 'song',
+            }))
+            : (payload.items || []);
+
+        deckCards[mode] = payloadItems.map((item, index) => {
             const coverKey = getCoverKey(item);
             const coverRequestUrl = buildCoverUrl(item)?.toString() || '';
             return {
@@ -428,6 +476,11 @@ const fetchLibraryMode = async (mode, force = false, context = null) => {
             return;
         }
 
+        if (mode === 'albumTracks' && requestContext?.id === albumTracksContext?.id) {
+            renderLibraryDeck('albumTracks', { drop: true });
+            return;
+        }
+
         refreshDeckIfActive(mode);
     }
 };
@@ -449,9 +502,10 @@ const resetLibraryDeckData = () => {
     coverProgress.active = false;
     coverProgress.run += 1;
     artistAlbumContext = null;
+    albumTracksContext = null;
     artistDeckReturnOffset = null;
     setLibraryBackVisible(false);
-    document.body.classList.remove('artist-albums-mode');
+    document.body.classList.remove('artist-albums-mode', 'album-tracks-mode');
     updateCoverProgress();
 
     if (deckMode) {
@@ -484,7 +538,7 @@ const setLibraryBackVisible = (isVisible) => {
 };
 
 const updateLibraryBackButton = () => {
-    setLibraryBackVisible(document.body.classList.contains('library-mode') && deckMode === 'artistAlbums');
+    setLibraryBackVisible(document.body.classList.contains('library-mode') && (deckMode === 'artistAlbums' || deckMode === 'albumTracks'));
 };
 
 const flipElementToState = (element, applyState, options = {}) => {
@@ -683,14 +737,17 @@ const createDeckCard = (item, index = 0) => {
     const count = Number(tracks) || 0;
     const defaultCountLabel = type === 'artist'
         ? `${count} ${count === 1 ? 'album' : 'albums'}`
-        : `${count} ${count === 1 ? 'track' : 'tracks'}`;
+        : type === 'song' ? 'play' : `${count} ${count === 1 ? 'track' : 'tracks'}`;
 
     card.className = 'library-card';
     card.classList.toggle('is-status-card', Boolean(isStatus));
+    card.classList.toggle('is-track-card', type === 'song');
     card.tabIndex = isStatus ? -1 : 0;
     if (!isStatus) {
         card.setAttribute('role', 'button');
-        card.setAttribute('aria-label', type === 'artist' ? `show albums by ${title}` : `play ${title}`);
+        card.setAttribute('aria-label', type === 'artist'
+            ? `show albums by ${title}`
+            : type === 'album' ? `show tracks from ${title}` : `play ${title}`);
     }
     card.dataset.tilt = tilt;
     if (coverKey) {
@@ -753,18 +810,42 @@ const applyDeckTransform = () => {
     }
 
     const baseCount = deckBaseCards.length;
-    const offset = deckCanScroll ? modulo(deckCurrentOffset, deckLoopWidth) : 0;
-    const firstIndex = deckCanScroll ? Math.floor(offset / deckCardStep) : 0;
-    const fractionalOffset = deckCanScroll ? offset - (firstIndex * deckCardStep) : 0;
+    const offset = deckIsFinite
+        ? Math.max(0, Math.min(deckCurrentOffset, deckMaxOffset))
+        : deckCanScroll ? deckCurrentOffset : 0;
     const centerSlot = Math.floor(deckSlotCards.length / 2);
     const staticWidth = (baseCount * deckCardWidth) + (Math.max(0, baseCount - 1) * deckCardGap);
-    const staticStartX = -(staticWidth / 2);
+    const staticStartX = deckIsFinite ? deckFiniteStartX : -(staticWidth / 2);
     const dropDistance = Math.max(libraryDeck?.clientHeight || 300, 260);
+    const recyclePadding = deckCardStep * 2;
+    const leftRecycleEdge = -((libraryDeck?.clientWidth || window.innerWidth) / 2) - recyclePadding;
+    const rightRecycleEdge = ((libraryDeck?.clientWidth || window.innerWidth) / 2) + recyclePadding;
     let changedContent = false;
 
     deckSlotCards.forEach((card, slotIndex) => {
-        const slotPosition = slotIndex - centerSlot;
-        const dataIndex = deckCanScroll ? modulo(firstIndex + slotPosition, baseCount) : slotIndex;
+        let virtualSlot = Number.parseInt(card.dataset.virtualSlot, 10);
+        if (!Number.isFinite(virtualSlot)) {
+            virtualSlot = slotIndex - centerSlot;
+        }
+
+        if (deckCanScroll && !deckIsFinite) {
+            let virtualX = (virtualSlot * deckCardStep) - offset - (deckCardWidth / 2);
+            const slotSpan = deckSlotCards.length * deckCardStep;
+
+            while (virtualX < leftRecycleEdge) {
+                virtualSlot += deckSlotCards.length;
+                virtualX += slotSpan;
+            }
+
+            while (virtualX > rightRecycleEdge) {
+                virtualSlot -= deckSlotCards.length;
+                virtualX -= slotSpan;
+            }
+        }
+
+        const dataIndex = deckIsFinite
+            ? slotIndex
+            : deckCanScroll ? modulo(virtualSlot, baseCount) : slotIndex;
         let activeCard = card;
 
         if (activeCard.dataset.itemIndex !== String(dataIndex)) {
@@ -772,15 +853,20 @@ const applyDeckTransform = () => {
             const nextCard = createDeckCard(deckBaseCards[dataIndex], dataIndex);
             nextCard.dataset.itemIndex = String(dataIndex);
             nextCard.dataset.slotIndex = String(slotIndex);
+            nextCard.dataset.virtualSlot = String(virtualSlot);
             libraryDeckTrack.replaceChild(nextCard, activeCard);
             deckSlotCards[slotIndex] = nextCard;
             activeCard = nextCard;
             changedContent = true;
+        } else {
+            activeCard.dataset.virtualSlot = String(virtualSlot);
         }
 
-        const x = deckCanScroll
-            ? (slotPosition * deckCardStep) - fractionalOffset - (deckCardWidth / 2)
-            : staticStartX + (slotIndex * deckCardStep);
+        const x = deckIsFinite
+            ? staticStartX + (slotIndex * deckCardStep) - offset
+            : deckCanScroll
+                ? (virtualSlot * deckCardStep) - offset - (deckCardWidth / 2)
+                : staticStartX + (slotIndex * deckCardStep);
         const finalTransform = `translate3d(${x}px, 0, 0) rotate(${activeCard.dataset.tilt})`;
         activeCard.style.transform = finalTransform;
 
@@ -812,7 +898,7 @@ const applyDeckTransform = () => {
     }
 
     if (changedContent) {
-        queueLibraryMarquees();
+        queueLibraryMarquees(false, { immediateNew: true });
     }
 };
 
@@ -830,9 +916,21 @@ const stopLibraryMarquees = () => {
     libraryMarquees.forEach((_, content) => stopLibraryMarquee(content));
 };
 
-const startLibraryMarquee = (line, content, token, pause = 1900) => {
+const startLibraryMarquee = (line, content, token, pause = 1900, options = {}) => {
+    const variant = options.variant || 'normal';
+    const force = Boolean(options.force);
+
     if (token !== libraryMarqueeToken || !line || !content || !content.textContent.trim()) {
         return;
+    }
+
+    const existing = libraryMarquees.get(content);
+    if (existing && existing.variant === variant && !force) {
+        return;
+    }
+
+    if (existing) {
+        stopLibraryMarquee(content);
     }
 
     const overflowDistance = content.scrollWidth - line.clientWidth;
@@ -844,8 +942,12 @@ const startLibraryMarquee = (line, content, token, pause = 1900) => {
 
     const travelDistance = overflowDistance + 16;
     const endTransform = `translateX(-${travelDistance}px)`;
-    const travelDuration = Math.max(3400, travelDistance * 68);
-    const returnDuration = Math.max(900, travelDistance * 22);
+    const travelDuration = variant === 'hover'
+        ? Math.max(720, travelDistance * 13)
+        : Math.max(1250, travelDistance * 23);
+    const returnDuration = variant === 'hover'
+        ? Math.max(260, travelDistance * 5)
+        : Math.max(420, travelDistance * 8);
 
     content.classList.add('is-overflowing');
     content.style.transform = 'translateX(0)';
@@ -864,13 +966,14 @@ const startLibraryMarquee = (line, content, token, pause = 1900) => {
             fill: 'forwards',
         });
 
-        libraryMarquees.set(content, { animation, timeout: null });
+        libraryMarquees.set(content, { animation, timeout: null, variant });
 
         animation.onfinish = () => {
             if (token !== libraryMarqueeToken) {
                 return;
             }
 
+            animation.cancel();
             content.style.transform = endTransform;
             const returnAnimation = content.animate([
                 { transform: endTransform },
@@ -881,31 +984,39 @@ const startLibraryMarquee = (line, content, token, pause = 1900) => {
                 fill: 'forwards',
             });
 
-            libraryMarquees.set(content, { animation: returnAnimation, timeout: null });
+            libraryMarquees.set(content, { animation: returnAnimation, timeout: null, variant });
 
             returnAnimation.onfinish = () => {
                 if (token !== libraryMarqueeToken) {
                     return;
                 }
 
+                returnAnimation.cancel();
                 content.style.transform = 'translateX(0)';
-                requestAnimationFrame(() => startLibraryMarquee(line, content, token, pause));
+                libraryMarquees.delete(content);
+                requestAnimationFrame(() => startLibraryMarquee(line, content, token, pause, options));
             };
         };
     }, pause);
 
-    libraryMarquees.set(content, { animation: null, timeout });
+    libraryMarquees.set(content, { animation: null, timeout, variant });
 };
 
-const queueLibraryMarquees = () => {
-    stopLibraryMarquees();
+const queueLibraryMarquees = (reset = true, options = {}) => {
+    if (reset) {
+        stopLibraryMarquees();
+    }
     const token = libraryMarqueeToken;
+    const immediateNew = Boolean(options.immediateNew);
 
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             libraryDeckTrack?.querySelectorAll('.library-card-title').forEach((line, index) => {
                 const content = line.querySelector('.library-card-title-text');
-                startLibraryMarquee(line, content, token, 1600 + ((index % 4) * 180));
+                const pause = immediateNew && !libraryMarquees.has(content)
+                    ? 0
+                    : 1600 + ((index % 4) * 180);
+                startLibraryMarquee(line, content, token, pause);
             });
         });
     });
@@ -921,32 +1032,52 @@ const measureDeckLoop = () => {
     const baseCount = deckBaseCards.length || 1;
     const visibleWidth = libraryDeck.clientWidth || window.innerWidth;
     const rem = getRemSize();
-    const reservedWidth = deckMode === 'artistAlbums' ? 6.4 * rem : 1.2 * rem;
+    const isFiniteTrackDeck = deckMode === 'albumTracks';
+    const reservedWidth = isFiniteTrackDeck ? 8.4 * rem : deckMode === 'artistAlbums' ? 6.4 * rem : 1.2 * rem;
+    const leftInset = isFiniteTrackDeck ? 7.35 * rem : 0;
+    const rightInset = isFiniteTrackDeck ? 1.25 * rem : 0;
     const availableWidth = Math.max(cardWidth, visibleWidth - reservedWidth);
     const totalContentWidth = (baseCount * cardWidth) + (Math.max(0, baseCount - 1) * gap);
-    const fitsWithoutScroll = deckMode === 'artistAlbums' && totalContentWidth <= availableWidth;
+    const fitsWithoutScroll = (deckMode === 'artistAlbums' || isFiniteTrackDeck) && totalContentWidth <= availableWidth;
     const minimumSlots = Math.ceil((visibleWidth + (step * 4)) / step);
-    const slotCount = fitsWithoutScroll ? baseCount : (baseCount === 1 ? 1 : Math.max(minimumSlots, 7));
+    const slotCount = isFiniteTrackDeck
+        ? baseCount
+        : fitsWithoutScroll ? baseCount : (baseCount === 1 ? 1 : Math.max(minimumSlots, 7));
 
-    deckCanScroll = !fitsWithoutScroll && baseCount > 1;
+    deckIsFinite = isFiniteTrackDeck;
+    deckCanScroll = baseCount > 1 && (isFiniteTrackDeck ? !fitsWithoutScroll : !fitsWithoutScroll);
     deckCardWidth = cardWidth;
     deckCardGap = gap;
     deckCardStep = step;
+    deckFiniteStartX = -(visibleWidth / 2) + leftInset;
+    deckMaxOffset = isFiniteTrackDeck
+        ? Math.max(0, totalContentWidth - Math.max(cardWidth, visibleWidth - leftInset - rightInset))
+        : 0;
     deckBuffer = step * 2;
     deckLoopWidth = Math.max(baseCount * step, step);
+
+    if (deckIsFinite) {
+        deckCurrentOffset = deckCanScroll ? Math.max(0, Math.min(deckCurrentOffset, deckMaxOffset)) : 0;
+    } else {
+        deckCurrentOffset = deckCanScroll ? modulo(deckCurrentOffset, deckLoopWidth) : 0;
+    }
+    deckTargetOffset = deckCurrentOffset;
+
+    const centerSlot = Math.floor(slotCount / 2);
+    const firstVirtualSlot = deckCanScroll && !deckIsFinite ? Math.floor(deckCurrentOffset / step) : 0;
 
     stopLibraryMarquees();
     libraryDeckTrack.innerHTML = '';
     deckSlotCards = Array.from({ length: slotCount }, (_, index) => {
-        const card = createDeckCard(deckBaseCards[index % baseCount], index);
-        card.dataset.itemIndex = '';
+        const virtualSlot = deckCanScroll && !deckIsFinite ? firstVirtualSlot + index - centerSlot : index;
+        const dataIndex = deckIsFinite ? index : deckCanScroll ? modulo(virtualSlot, baseCount) : index;
+        const card = createDeckCard(deckBaseCards[dataIndex], dataIndex);
+        card.dataset.itemIndex = String(dataIndex);
         card.dataset.slotIndex = String(index);
+        card.dataset.virtualSlot = String(virtualSlot);
         libraryDeckTrack.append(card);
         return card;
     });
-
-    deckCurrentOffset = deckCanScroll ? modulo(deckCurrentOffset, deckLoopWidth) : 0;
-    deckTargetOffset = deckCurrentOffset;
     applyDeckTransform();
     queueLibraryMarquees();
 };
@@ -961,6 +1092,7 @@ const renderLibraryDeck = (mode, options = {}) => {
     libraryDeck.dataset.deckMode = mode;
     libraryDeck.setAttribute('aria-hidden', 'false');
     document.body.classList.toggle('artist-albums-mode', mode === 'artistAlbums');
+    document.body.classList.toggle('album-tracks-mode', mode === 'albumTracks');
     updateLibraryBackButton();
 
     if (deckAnimationFrame) {
@@ -988,9 +1120,13 @@ const renderLibraryDeck = (mode, options = {}) => {
 };
 
 const animateDeckScroll = () => {
+    if (deckIsFinite) {
+        deckTargetOffset = Math.max(0, Math.min(deckTargetOffset, deckMaxOffset));
+    }
+
     deckCurrentOffset += (deckTargetOffset - deckCurrentOffset) * 0.12;
 
-    if (Math.abs(deckCurrentOffset) > deckLoopWidth * 50 && deckLoopWidth) {
+    if (!deckIsFinite && Math.abs(deckCurrentOffset) > deckLoopWidth * 50 && deckLoopWidth) {
         const remainingDistance = deckTargetOffset - deckCurrentOffset;
         deckCurrentOffset = modulo(deckCurrentOffset, deckLoopWidth);
         deckTargetOffset = deckCurrentOffset + remainingDistance;
@@ -1001,7 +1137,8 @@ const animateDeckScroll = () => {
     if (Math.abs(deckTargetOffset - deckCurrentOffset) > 0.2) {
         deckAnimationFrame = requestAnimationFrame(animateDeckScroll);
     } else {
-        deckCurrentOffset = deckTargetOffset;
+        deckCurrentOffset = deckIsFinite ? Math.max(0, Math.min(deckTargetOffset, deckMaxOffset)) : deckTargetOffset;
+        deckTargetOffset = deckCurrentOffset;
         applyDeckTransform();
         deckAnimationFrame = null;
     }
@@ -1023,6 +1160,10 @@ const queueDeckScroll = (delta) => {
 
     interruptDeckDrop();
     deckTargetOffset += delta;
+
+    if (deckIsFinite) {
+        deckTargetOffset = Math.max(0, Math.min(deckTargetOffset, deckMaxOffset));
+    }
 
     if (!deckAnimationFrame) {
         deckAnimationFrame = requestAnimationFrame(animateDeckScroll);
@@ -1055,6 +1196,7 @@ const animateTabsHome = () => {
 const closeLibraryMode = () => {
     activeLibraryTab = null;
     artistAlbumContext = null;
+    albumTracksContext = null;
     artistDeckReturnOffset = null;
     stopLibraryMarquees();
     animateSubtitleIn();
@@ -1063,7 +1205,7 @@ const closeLibraryMode = () => {
         document.body.classList.remove('library-mode');
         libraryTabs.classList.remove('is-focused');
         delete libraryTabs.dataset.activeTab;
-        document.body.classList.remove('artist-albums-mode');
+        document.body.classList.remove('artist-albums-mode', 'album-tracks-mode');
         libraryDeck?.setAttribute('aria-hidden', 'true');
         updateLibraryBackButton();
 
@@ -1084,6 +1226,7 @@ const openLibraryTab = (selectedTab) => {
 
     const mode = selectedTab.dataset.libraryTab;
     artistAlbumContext = null;
+    albumTracksContext = null;
     artistDeckReturnOffset = null;
     activeLibraryTab = selectedTab;
     animateSubtitleOut();
@@ -1115,6 +1258,42 @@ libraryDeck?.addEventListener('wheel', (event) => {
     queueDeckScroll(event.deltaY || event.deltaX);
 }, { passive: false });
 
+const restartCardMarquee = (card, hover = false) => {
+    const line = card?.querySelector('.library-card-title');
+    const content = line?.querySelector('.library-card-title-text');
+
+    if (!line || !content) {
+        return;
+    }
+
+    const slotIndex = Number.parseInt(card.dataset.slotIndex, 10) || 0;
+    stopLibraryMarquee(content);
+    startLibraryMarquee(line, content, libraryMarqueeToken, hover ? 1000 : 1600 + ((slotIndex % 4) * 180), {
+        variant: hover ? 'hover' : 'normal',
+        force: true,
+    });
+};
+
+libraryDeckTrack?.addEventListener('pointerover', (event) => {
+    const card = event.target.closest('.library-card');
+
+    if (!card || card.contains(event.relatedTarget)) {
+        return;
+    }
+
+    restartCardMarquee(card, true);
+});
+
+libraryDeckTrack?.addEventListener('pointerout', (event) => {
+    const card = event.target.closest('.library-card');
+
+    if (!card || card.contains(event.relatedTarget)) {
+        return;
+    }
+
+    restartCardMarquee(card, false);
+});
+
 const openArtistAlbums = (artist) => {
     if (!artist?.id) {
         return;
@@ -1130,13 +1309,45 @@ const openArtistAlbums = (artist) => {
     fetchLibraryMode('artistAlbums', true, artistAlbumContext);
 };
 
-const backToArtists = () => {
+const openAlbumTracks = (album) => {
+    if (!album?.id) {
+        return;
+    }
+
+    albumTracksContext = {
+        id: album.id,
+        title: album.title || 'album',
+        artist: album.subtitle || album.artist || artistAlbumContext?.title || '',
+        returnMode: deckMode === 'artistAlbums' ? 'artistAlbums' : 'albums',
+        returnOffset: deckCurrentOffset,
+        artistContext: artistAlbumContext ? { ...artistAlbumContext } : null,
+    };
+    libraryLoadState.albumTracks = 'loading';
+    deckCards.albumTracks = [];
+    fetchLibraryMode('albumTracks', true, albumTracksContext);
+};
+
+const backToPreviousLibraryView = () => {
     if (!document.body.classList.contains('library-mode')) {
+        return;
+    }
+
+    if (deckMode === 'albumTracks') {
+        const context = albumTracksContext;
+        const returnMode = context?.returnMode === 'artistAlbums' ? 'artistAlbums' : 'albums';
+        const restoreOffset = context?.returnOffset;
+        artistAlbumContext = returnMode === 'artistAlbums' ? context?.artistContext : null;
+        albumTracksContext = null;
+        renderLibraryDeck(returnMode, { drop: true, direction: 'up', restoreOffset });
+        if (!deckCards[returnMode]?.length) {
+            fetchLibraryMode(returnMode, false, artistAlbumContext);
+        }
         return;
     }
 
     const restoreOffset = artistDeckReturnOffset;
     artistAlbumContext = null;
+    albumTracksContext = null;
     renderLibraryDeck('artists', { drop: true, direction: 'up', restoreOffset });
     fetchLibraryMode('artists');
 };
@@ -1157,6 +1368,16 @@ const playDeckCard = (card) => {
         return;
     }
 
+    if (item.type === 'album' && (deckMode === 'albums' || deckMode === 'artistAlbums')) {
+        openAlbumTracks(item);
+        return;
+    }
+
+    if (item.type === 'song' && deckMode === 'albumTracks') {
+        window.spinachPlayer?.playQueue?.(deckBaseCards.filter((track) => track?.type === 'song'), itemIndex);
+        return;
+    }
+
     window.spinachPlayer?.playLibraryItem?.(item);
 };
 
@@ -1164,7 +1385,7 @@ libraryDeckTrack?.addEventListener('click', (event) => {
     playDeckCard(event.target.closest('.library-card'));
 });
 
-libraryBackButton?.addEventListener('click', backToArtists);
+libraryBackButton?.addEventListener('click', backToPreviousLibraryView);
 
 libraryDeckTrack?.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') {

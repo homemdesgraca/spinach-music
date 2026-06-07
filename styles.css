@@ -566,6 +566,19 @@ body.library-mode .library-deck {
     box-shadow: 1px 2px 0 var(--card-shadow, var(--color-shadow));
 }
 
+body.album-tracks-mode .library-card.is-track-card .library-card-count {
+    left: 0.82rem;
+    right: auto;
+    bottom: 0.82rem;
+    z-index: 4;
+    padding: 0.38rem 0.62rem;
+    border-width: 2px;
+    background: color-mix(in srgb, var(--card-surface, var(--color-surface)) 86%, var(--color-input-bg));
+    font-size: 1.02rem;
+    letter-spacing: 0.02em;
+    box-shadow: 2px 3px 0 var(--card-shadow, var(--color-shadow));
+}
+
 @media (max-height: 720px) {
     .library-deck {
         height: var(--library-deck-height, clamp(11.8rem, 42vh, 17.5rem));
@@ -585,6 +598,10 @@ body.library-mode .library-deck {
     .library-card-subtitle,
     .library-card-count {
         font-size: 0.66rem;
+    }
+
+    body.album-tracks-mode .library-card.is-track-card .library-card-count {
+        font-size: 0.92rem;
     }
 }
 
