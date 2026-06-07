@@ -188,6 +188,54 @@ body.library-mode .top-section .subtitle-txt:not(.is-leaving) {
     animation-name: none;
 }
 
+.library-back {
+    position: absolute;
+    left: 0.95rem;
+    bottom: 0.82rem;
+    z-index: 5;
+    min-width: 5.8rem;
+    min-height: 2.45rem;
+    padding: 0.45rem 0.85rem;
+    border: 2px solid var(--color-text);
+    border-radius: 0.9rem 0.9rem 0.25rem 0.25rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-size: 1.25rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 2px 3px 0 var(--color-shadow);
+    text-shadow: 1px 1px 0 var(--color-shadow);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(0.85rem) scale(0.92);
+    transition: opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1), transform 0.58s cubic-bezier(0.16, 1, 0.3, 1), background 0.28s ease, box-shadow 0.28s ease;
+}
+
+.library-back.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+.library-back:hover {
+    background: var(--color-surface-hover);
+    transform: translateY(-0.18rem) scale(1);
+    box-shadow: 2px 4px 0 var(--color-shadow);
+}
+
+.library-back:active {
+    transform: translateY(0.08rem) scale(0.98);
+    box-shadow: 1px 1px 0 var(--color-shadow);
+}
+
+.library-back:focus-visible {
+    outline: 3px solid var(--color-input-bg);
+    outline-offset: 3px;
+}
+
 .library-progress-tooltip {
     position: absolute;
     left: var(--library-tooltip-left, 50%);
@@ -284,12 +332,12 @@ body.library-mode .top-section .subtitle-txt:not(.is-leaving) {
 .library-deck {
     position: fixed;
     left: 50%;
-    bottom: 4.35rem;
+    bottom: clamp(3.35rem, 7vh, 4.35rem);
     z-index: 3;
-    width: min(96rem, calc(100vw - 2rem));
-    height: min(22rem, 54vh);
+    width: var(--library-deck-width, calc(var(--spinach-vw, 100vw) - clamp(0.45rem, 1.2vw, 1.2rem)));
+    height: var(--library-deck-height, clamp(13.5rem, calc(var(--spinach-vh, 100vh) * 0.46), 22rem));
     box-sizing: border-box;
-    padding: 0.95rem 0;
+    padding: clamp(0.62rem, 1.7vh, 0.95rem) 0;
     border: 2px solid var(--color-text);
     border-radius: 1.3rem;
     background: linear-gradient(90deg, rgba(149, 213, 178, 0.54), var(--color-surface) 12%, var(--color-surface) 88%, rgba(149, 213, 178, 0.54));
@@ -342,6 +390,7 @@ body.library-mode .library-deck {
     position: absolute;
     top: 0;
     bottom: 0;
+    left: 50%;
     width: clamp(13rem, 21vw, 18rem);
     display: grid;
     grid-template-rows: auto auto 1fr;
@@ -515,6 +564,28 @@ body.library-mode .library-deck {
     font-size: 0.72rem;
     font-weight: 900;
     box-shadow: 1px 2px 0 var(--card-shadow, var(--color-shadow));
+}
+
+@media (max-height: 720px) {
+    .library-deck {
+        height: var(--library-deck-height, clamp(11.8rem, 42vh, 17.5rem));
+        bottom: 3.1rem;
+        padding-block: 0.55rem;
+    }
+
+    .library-card {
+        padding: 0.72rem;
+        gap: 0.28rem;
+    }
+
+    .library-card-title {
+        font-size: clamp(1.25rem, 2.1vw, 1.78rem);
+    }
+
+    .library-card-subtitle,
+    .library-card-count {
+        font-size: 0.66rem;
+    }
 }
 
 .lyrics-drawer {

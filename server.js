@@ -337,7 +337,7 @@ const normalizeSongItem = (song, index = 0) => ({
     type: 'song',
 });
 
-const getNavidromeLibraryItems = async (connection, mode) => {
+const getNavidromeLibraryItems = async (connection, mode, options = {}) => {
     if (mode === 'artists') {
         const payload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getArtists').toString());
         const indexes = asList(payload?.['subsonic-response']?.artists?.index);
@@ -345,6 +345,17 @@ const getNavidromeLibraryItems = async (connection, mode) => {
             .flatMap((index) => asList(index?.artist))
             .map((artist, index) => normalizeLibraryItem(artist, mode, index))
             .filter((artist) => artist.title)
+            .sort((a, b) => a.title.localeCompare(b.title));
+    }
+
+    if (mode === 'artistAlbums') {
+        const payload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getArtist', { id: options.artistId }).toString());
+        return asList(payload?.['subsonic-response']?.artist?.album)
+            .map((album, index) => ({
+                ...normalizeLibraryItem(album, 'albums', index),
+                subtitle: options.artistTitle || firstLine(album?.artist || album?.albumArtist || ''),
+            }))
+            .filter((album) => album.title)
             .sort((a, b) => a.title.localeCompare(b.title));
     }
 
@@ -362,16 +373,26 @@ const getNavidromeLibraryItems = async (connection, mode) => {
 const sendNavidromeLibrary = async (request, response) => {
     const searchParams = new URL(request.url, `http://${request.headers.host}`).searchParams;
     const connection = getNavidromeConnection(searchParams);
-    const mode = firstLine(searchParams.get('mode')) === 'albums' ? 'albums' : 'artists';
+    const requestedMode = firstLine(searchParams.get('mode'));
+    const mode = requestedMode === 'albums'
+        ? 'albums'
+        : requestedMode === 'artistAlbums' ? 'artistAlbums' : 'artists';
+    const artistId = firstLine(searchParams.get('artistId'));
+    const artistTitle = firstLine(searchParams.get('artistTitle'));
 
     if (!connection.url || !connection.username || !connection.password) {
         sendJson(response, 400, { error: 'missing navidrome connection' });
         return;
     }
 
+    if (mode === 'artistAlbums' && !artistId) {
+        sendJson(response, 400, { error: 'missing artist id' });
+        return;
+    }
+
     try {
-        const items = await getNavidromeLibraryItems(connection, mode);
-        sendJson(response, 200, { mode, items });
+        const items = await getNavidromeLibraryItems(connection, mode, { artistId, artistTitle });
+        sendJson(response, 200, { mode, artistId, artistTitle, items });
     } catch (error) {
         sendJson(response, 502, { error: error?.message || 'failed to fetch navidrome library' });
     }

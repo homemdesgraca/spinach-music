@@ -2,6 +2,7 @@ const libraryTabs = document.querySelector('.library-tabs');
 const libraryTabButtons = document.querySelectorAll('.library-tab');
 const libraryDeck = document.querySelector('.library-deck');
 const libraryDeckTrack = document.querySelector('[data-library-deck-track]');
+const libraryBackButton = document.querySelector('.library-back');
 const libraryProgressTooltip = document.querySelector('.library-progress-tooltip');
 const libraryProgressText = libraryProgressTooltip?.querySelector('span');
 const subtitleText = document.querySelector('.subtitle-txt');
@@ -23,16 +24,19 @@ const CARD_COLORS = [
 const deckCards = {
     artists: [],
     albums: [],
+    artistAlbums: [],
 };
 
 const libraryLoadState = {
     artists: 'idle',
     albums: 'idle',
+    artistAlbums: 'idle',
 };
 
 const libraryFetchControllers = {
     artists: null,
     albums: null,
+    artistAlbums: null,
 };
 
 const coverCache = new Map();
@@ -55,6 +59,9 @@ let deckCurrentOffset = 0;
 let deckTargetOffset = 0;
 let deckLoopWidth = 0;
 let deckCardStep = 0;
+let deckCardWidth = 0;
+let deckCardGap = 0;
+let deckCanScroll = true;
 let deckBuffer = 0;
 let deckMode = '';
 let deckSlotCards = [];
@@ -62,7 +69,39 @@ let deckBaseCards = [];
 let libraryMarqueeToken = 0;
 let coverWarmupQueue = Promise.resolve();
 let libraryDataRun = 0;
+let artistAlbumContext = null;
+let artistDeckReturnOffset = null;
+let deckDropAnimationPending = false;
+let deckDropRun = 0;
+let deckDropDirection = 'down';
 const libraryMarquees = new Map();
+
+const syncViewportVars = () => {
+    const viewport = window.visualViewport;
+    const width = Math.round(viewport?.width || window.innerWidth || document.documentElement.clientWidth || 0);
+    const height = Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 0);
+    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+
+    if (width) {
+        const sideMargin = Math.min(Math.max(width * 0.006, 6), 18);
+        const deckWidth = Math.max(320, width - (sideMargin * 2));
+        document.documentElement.style.setProperty('--spinach-vw', `${width}px`);
+        document.documentElement.style.setProperty('--library-deck-width', `${Math.round(deckWidth)}px`);
+    }
+
+    if (height) {
+        const widthForHeight = width || window.innerWidth || 0;
+        const maxHeight = 22 * rem;
+        const minHeight = 15.2 * rem;
+        const wideFlattening = Math.max(0, widthForHeight - (96 * rem)) * 0.018;
+        const preferredHeight = Math.min(height * 0.48, (21.5 * rem) - wideFlattening);
+        const deckHeight = Math.min(maxHeight, Math.max(minHeight, preferredHeight));
+        document.documentElement.style.setProperty('--spinach-vh', `${height}px`);
+        document.documentElement.style.setProperty('--library-deck-height', `${Math.round(deckHeight)}px`);
+    }
+};
+
+syncViewportVars();
 
 const loadNavidromeConnection = () => {
     try {
@@ -91,7 +130,7 @@ const getStatusCard = (mode) => {
     }
 
     if (state === 'empty') {
-        return { title: `no ${label} found`, subtitle: 'navidrome', countLabel: 'empty', colors: ['#95d5b2', '#40916c'], isStatus: true };
+        return { title: `no ${label} found`, subtitle: artistAlbumContext?.title || 'navidrome', countLabel: 'empty', colors: ['#95d5b2', '#40916c'], isStatus: true };
     }
 
     return { title: 'connect navidrome', subtitle: 'open config', countLabel: 'needed', colors: ['#d8f3dc', '#40916c'], isStatus: true };
@@ -99,10 +138,14 @@ const getStatusCard = (mode) => {
 
 const getDeckCards = (mode) => deckCards[mode]?.length ? deckCards[mode] : [getStatusCard(mode)];
 
-const buildLibraryUrl = (mode) => {
+const buildLibraryUrl = (mode, context = null) => {
     const connection = loadNavidromeConnection();
 
     if (!connection?.url || !connection?.username || !connection?.password) {
+        return null;
+    }
+
+    if (mode === 'artistAlbums' && !context?.id) {
         return null;
     }
 
@@ -111,6 +154,10 @@ const buildLibraryUrl = (mode) => {
     url.searchParams.set('url', connection.url);
     url.searchParams.set('username', connection.username);
     url.searchParams.set('password', connection.password);
+    if (mode === 'artistAlbums') {
+        url.searchParams.set('artistId', context.id);
+        url.searchParams.set('artistTitle', context.title || '');
+    }
     return url;
 };
 
@@ -304,20 +351,25 @@ const queueCoverCaching = (mode, items, dataRun = libraryDataRun) => {
     return coverWarmupQueue;
 };
 
-const refreshDeckIfActive = (mode) => {
+const refreshDeckIfActive = (mode, options = {}) => {
     if (deckMode === mode) {
+        if (options.drop) {
+            deckDropAnimationPending = true;
+            deckDropRun += 1;
+        }
         requestAnimationFrame(measureDeckLoop);
     }
 };
 
-const fetchLibraryMode = async (mode, force = false) => {
+const fetchLibraryMode = async (mode, force = false, context = null) => {
     const requestRun = libraryDataRun;
+    const requestContext = mode === 'artistAlbums' ? (context || artistAlbumContext) : null;
 
-    if (!force && (libraryLoadState[mode] === 'loaded' || libraryLoadState[mode] === 'loading')) {
+    if (!force && mode !== 'artistAlbums' && (libraryLoadState[mode] === 'loaded' || libraryLoadState[mode] === 'loading')) {
         return;
     }
 
-    const url = buildLibraryUrl(mode);
+    const url = buildLibraryUrl(mode, requestContext);
     if (!url) {
         deckCards[mode] = [];
         libraryLoadState[mode] = 'idle';
@@ -342,7 +394,7 @@ const fetchLibraryMode = async (mode, force = false) => {
             throw new Error(payload?.error || 'library failed');
         }
 
-        if (requestRun !== libraryDataRun) {
+        if (requestRun !== libraryDataRun || (mode === 'artistAlbums' && requestContext?.id !== artistAlbumContext?.id)) {
             return;
         }
 
@@ -371,6 +423,11 @@ const fetchLibraryMode = async (mode, force = false) => {
         deckCards[mode] = [];
         libraryLoadState[mode] = 'error';
     } finally {
+        if (mode === 'artistAlbums' && requestContext?.id === artistAlbumContext?.id) {
+            renderLibraryDeck('artistAlbums', { drop: true });
+            return;
+        }
+
         refreshDeckIfActive(mode);
     }
 };
@@ -391,11 +448,43 @@ const resetLibraryDeckData = () => {
     coverProgress.done = 0;
     coverProgress.active = false;
     coverProgress.run += 1;
+    artistAlbumContext = null;
+    artistDeckReturnOffset = null;
+    setLibraryBackVisible(false);
+    document.body.classList.remove('artist-albums-mode');
     updateCoverProgress();
 
     if (deckMode) {
         requestAnimationFrame(measureDeckLoop);
     }
+};
+
+const setLibraryBackVisible = (isVisible) => {
+    if (!libraryBackButton) {
+        return;
+    }
+
+    if (!isVisible && libraryBackButton.contains(document.activeElement)) {
+        activeLibraryTab?.focus?.({ preventScroll: true });
+        if (libraryBackButton.contains(document.activeElement)) {
+            libraryBackButton.blur();
+        }
+    }
+
+    libraryBackButton.classList.toggle('is-visible', isVisible);
+    libraryBackButton.disabled = !isVisible;
+    libraryBackButton.inert = !isVisible;
+    libraryBackButton.setAttribute('tabindex', isVisible ? '0' : '-1');
+
+    if (isVisible) {
+        libraryBackButton.removeAttribute('aria-hidden');
+    } else {
+        libraryBackButton.setAttribute('aria-hidden', 'true');
+    }
+};
+
+const updateLibraryBackButton = () => {
+    setLibraryBackVisible(document.body.classList.contains('library-mode') && deckMode === 'artistAlbums');
 };
 
 const flipElementToState = (element, applyState, options = {}) => {
@@ -601,7 +690,7 @@ const createDeckCard = (item, index = 0) => {
     card.tabIndex = isStatus ? -1 : 0;
     if (!isStatus) {
         card.setAttribute('role', 'button');
-        card.setAttribute('aria-label', `play ${title}`);
+        card.setAttribute('aria-label', type === 'artist' ? `show albums by ${title}` : `play ${title}`);
     }
     card.dataset.tilt = tilt;
     if (coverKey) {
@@ -664,15 +753,18 @@ const applyDeckTransform = () => {
     }
 
     const baseCount = deckBaseCards.length;
-    const offset = modulo(deckCurrentOffset, deckLoopWidth);
-    const firstIndex = Math.floor(offset / deckCardStep);
-    const fractionalOffset = offset - (firstIndex * deckCardStep);
-    const bufferSlots = deckSlotCards.length > 1 ? Math.min(2, deckSlotCards.length - 1) : 0;
+    const offset = deckCanScroll ? modulo(deckCurrentOffset, deckLoopWidth) : 0;
+    const firstIndex = deckCanScroll ? Math.floor(offset / deckCardStep) : 0;
+    const fractionalOffset = deckCanScroll ? offset - (firstIndex * deckCardStep) : 0;
+    const centerSlot = Math.floor(deckSlotCards.length / 2);
+    const staticWidth = (baseCount * deckCardWidth) + (Math.max(0, baseCount - 1) * deckCardGap);
+    const staticStartX = -(staticWidth / 2);
+    const dropDistance = Math.max(libraryDeck?.clientHeight || 300, 260);
     let changedContent = false;
 
     deckSlotCards.forEach((card, slotIndex) => {
-        const slotPosition = slotIndex - bufferSlots;
-        const dataIndex = modulo(firstIndex + slotPosition, baseCount);
+        const slotPosition = slotIndex - centerSlot;
+        const dataIndex = deckCanScroll ? modulo(firstIndex + slotPosition, baseCount) : slotIndex;
         let activeCard = card;
 
         if (activeCard.dataset.itemIndex !== String(dataIndex)) {
@@ -686,9 +778,38 @@ const applyDeckTransform = () => {
             changedContent = true;
         }
 
-        const x = (slotPosition * deckCardStep) - fractionalOffset;
-        activeCard.style.transform = `translate3d(${x}px, 0, 0) rotate(${activeCard.dataset.tilt})`;
+        const x = deckCanScroll
+            ? (slotPosition * deckCardStep) - fractionalOffset - (deckCardWidth / 2)
+            : staticStartX + (slotIndex * deckCardStep);
+        const finalTransform = `translate3d(${x}px, 0, 0) rotate(${activeCard.dataset.tilt})`;
+        activeCard.style.transform = finalTransform;
+
+        if (deckDropAnimationPending && activeCard.dataset.dropRun !== String(deckDropRun)) {
+            activeCard.dataset.dropRun = String(deckDropRun);
+            const isReverseDrop = deckDropDirection === 'up';
+            const startY = isReverseDrop ? dropDistance : -dropDistance;
+            const overshootY = isReverseDrop ? -18 : 18;
+            const dropAnimation = activeCard.animate([
+                { opacity: 0, transform: `translate3d(${x}px, ${startY}px, 0) rotate(${activeCard.dataset.tilt})` },
+                { opacity: 1, transform: `translate3d(${x}px, ${overshootY}px, 0) rotate(${activeCard.dataset.tilt})`, offset: 0.82 },
+                { opacity: 1, transform: finalTransform },
+            ], {
+                duration: 760 + (Math.min(slotIndex, 6) * 54),
+                easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                fill: 'both',
+            });
+            dropAnimation.onfinish = () => {
+                if (activeCard.dataset.dropRun === String(deckDropRun)) {
+                    activeCard.style.opacity = '1';
+                    activeCard.style.transform = finalTransform;
+                }
+            };
+        }
     });
+
+    if (deckDropAnimationPending) {
+        deckDropAnimationPending = false;
+    }
 
     if (changedContent) {
         queueLibraryMarquees();
@@ -795,13 +916,21 @@ const measureDeckLoop = () => {
         return;
     }
 
-    const { step } = getDeckCardMetrics();
+    const { cardWidth, gap, step } = getDeckCardMetrics();
     deckBaseCards = getDeckCards(deckMode);
     const baseCount = deckBaseCards.length || 1;
     const visibleWidth = libraryDeck.clientWidth || window.innerWidth;
+    const rem = getRemSize();
+    const reservedWidth = deckMode === 'artistAlbums' ? 6.4 * rem : 1.2 * rem;
+    const availableWidth = Math.max(cardWidth, visibleWidth - reservedWidth);
+    const totalContentWidth = (baseCount * cardWidth) + (Math.max(0, baseCount - 1) * gap);
+    const fitsWithoutScroll = deckMode === 'artistAlbums' && totalContentWidth <= availableWidth;
     const minimumSlots = Math.ceil((visibleWidth + (step * 4)) / step);
-    const slotCount = baseCount === 1 ? 1 : Math.min(baseCount, minimumSlots);
+    const slotCount = fitsWithoutScroll ? baseCount : (baseCount === 1 ? 1 : Math.max(minimumSlots, 7));
 
+    deckCanScroll = !fitsWithoutScroll && baseCount > 1;
+    deckCardWidth = cardWidth;
+    deckCardGap = gap;
     deckCardStep = step;
     deckBuffer = step * 2;
     deckLoopWidth = Math.max(baseCount * step, step);
@@ -816,13 +945,13 @@ const measureDeckLoop = () => {
         return card;
     });
 
-    deckCurrentOffset = modulo(deckCurrentOffset, deckLoopWidth);
+    deckCurrentOffset = deckCanScroll ? modulo(deckCurrentOffset, deckLoopWidth) : 0;
     deckTargetOffset = deckCurrentOffset;
     applyDeckTransform();
     queueLibraryMarquees();
 };
 
-const renderLibraryDeck = (mode) => {
+const renderLibraryDeck = (mode, options = {}) => {
     if (!libraryDeck || !libraryDeckTrack) {
         return;
     }
@@ -831,10 +960,28 @@ const renderLibraryDeck = (mode) => {
     deckMode = mode;
     libraryDeck.dataset.deckMode = mode;
     libraryDeck.setAttribute('aria-hidden', 'false');
+    document.body.classList.toggle('artist-albums-mode', mode === 'artistAlbums');
+    updateLibraryBackButton();
+
+    if (deckAnimationFrame) {
+        cancelAnimationFrame(deckAnimationFrame);
+        deckAnimationFrame = null;
+    }
 
     if (!isSameMode) {
-        deckCurrentOffset = 0;
-        deckTargetOffset = 0;
+        const restoredOffset = Number.isFinite(options.restoreOffset) ? options.restoreOffset : 0;
+        deckCurrentOffset = restoredOffset;
+        deckTargetOffset = restoredOffset;
+    }
+
+    if (options.drop) {
+        deckDropRun += 1;
+        deckDropDirection = options.direction === 'up' ? 'up' : 'down';
+        requestAnimationFrame(() => {
+            deckDropAnimationPending = true;
+            measureDeckLoop();
+        });
+        return;
     }
 
     requestAnimationFrame(measureDeckLoop);
@@ -860,11 +1007,21 @@ const animateDeckScroll = () => {
     }
 };
 
+const interruptDeckDrop = () => {
+    deckDropAnimationPending = false;
+    deckSlotCards.forEach((card) => {
+        card.getAnimations().forEach((animation) => animation.cancel());
+        card.style.opacity = '1';
+    });
+    applyDeckTransform();
+};
+
 const queueDeckScroll = (delta) => {
-    if (!libraryDeckTrack || !deckLoopWidth) {
+    if (!libraryDeckTrack || !deckLoopWidth || !deckCanScroll) {
         return;
     }
 
+    interruptDeckDrop();
     deckTargetOffset += delta;
 
     if (!deckAnimationFrame) {
@@ -897,6 +1054,8 @@ const animateTabsHome = () => {
 
 const closeLibraryMode = () => {
     activeLibraryTab = null;
+    artistAlbumContext = null;
+    artistDeckReturnOffset = null;
     stopLibraryMarquees();
     animateSubtitleIn();
 
@@ -904,7 +1063,9 @@ const closeLibraryMode = () => {
         document.body.classList.remove('library-mode');
         libraryTabs.classList.remove('is-focused');
         delete libraryTabs.dataset.activeTab;
+        document.body.classList.remove('artist-albums-mode');
         libraryDeck?.setAttribute('aria-hidden', 'true');
+        updateLibraryBackButton();
 
         libraryTabButtons.forEach((tab) => {
             tab.classList.remove('is-selected', 'is-counterpart');
@@ -922,6 +1083,8 @@ const openLibraryTab = (selectedTab) => {
     }
 
     const mode = selectedTab.dataset.libraryTab;
+    artistAlbumContext = null;
+    artistDeckReturnOffset = null;
     activeLibraryTab = selectedTab;
     animateSubtitleOut();
     renderLibraryDeck(mode);
@@ -952,6 +1115,32 @@ libraryDeck?.addEventListener('wheel', (event) => {
     queueDeckScroll(event.deltaY || event.deltaX);
 }, { passive: false });
 
+const openArtistAlbums = (artist) => {
+    if (!artist?.id) {
+        return;
+    }
+
+    if (deckMode === 'artists') {
+        artistDeckReturnOffset = deckCurrentOffset;
+    }
+
+    artistAlbumContext = { id: artist.id, title: artist.title || 'artist' };
+    libraryLoadState.artistAlbums = 'loading';
+    deckCards.artistAlbums = [];
+    fetchLibraryMode('artistAlbums', true, artistAlbumContext);
+};
+
+const backToArtists = () => {
+    if (!document.body.classList.contains('library-mode')) {
+        return;
+    }
+
+    const restoreOffset = artistDeckReturnOffset;
+    artistAlbumContext = null;
+    renderLibraryDeck('artists', { drop: true, direction: 'up', restoreOffset });
+    fetchLibraryMode('artists');
+};
+
 const playDeckCard = (card) => {
     if (!card || card.classList.contains('is-status-card')) {
         return;
@@ -963,12 +1152,19 @@ const playDeckCard = (card) => {
         return;
     }
 
+    if (item.type === 'artist' && deckMode === 'artists') {
+        openArtistAlbums(item);
+        return;
+    }
+
     window.spinachPlayer?.playLibraryItem?.(item);
 };
 
 libraryDeckTrack?.addEventListener('click', (event) => {
     playDeckCard(event.target.closest('.library-card'));
 });
+
+libraryBackButton?.addEventListener('click', backToArtists);
 
 libraryDeckTrack?.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') {
@@ -984,12 +1180,36 @@ libraryDeckTrack?.addEventListener('keydown', (event) => {
     playDeckCard(card);
 });
 
-window.addEventListener('resize', () => {
+const getViewportSignature = () => {
+    const viewport = window.visualViewport;
+    return [
+        Math.round(viewport?.width || window.innerWidth || 0),
+        Math.round(viewport?.height || window.innerHeight || 0),
+        window.devicePixelRatio || 1,
+    ].join('x');
+};
+
+let lastViewportSignature = getViewportSignature();
+
+const handleViewportChange = () => {
+    lastViewportSignature = getViewportSignature();
+    syncViewportVars();
+
     if (activeLibraryTab) {
         animateTabsToCenter(activeLibraryTab);
-        measureDeckLoop();
+        requestAnimationFrame(measureDeckLoop);
     }
-});
+};
+
+window.addEventListener('resize', handleViewportChange);
+window.visualViewport?.addEventListener('resize', handleViewportChange);
+window.setInterval(() => {
+    const signature = getViewportSignature();
+
+    if (signature !== lastViewportSignature) {
+        handleViewportChange();
+    }
+}, 300);
 
 const warmLibraryCache = () => {
     if (!buildLibraryUrl('artists')) {
