@@ -1,6 +1,6 @@
 const http = require('http');
 const https = require('https');
-const { execFile } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 const { mkdir, readFile, writeFile } = require('fs/promises');
 const { createReadStream } = require('fs');
 const { createHash } = require('crypto');
@@ -10,6 +10,14 @@ const { fileURLToPath } = require('url');
 const PORT = 5500;
 const ROOT = __dirname;
 const COVER_CACHE_DIR = join(ROOT, '.cache', 'covers');
+const HAS_FILE_COMMAND = (() => {
+    try {
+        execFileSync('file', ['--version'], { stdio: 'ignore' });
+        return true;
+    } catch {
+        return false;
+    }
+})();
 
 const mimeTypes = {
     '.html': 'text/html; charset=utf-8',
@@ -353,8 +361,8 @@ const sendNavidromeCover = async (request, response) => {
 const sendNavidromeCacheCover = async (request, response) => {
     try {
         const { artUrl, cacheKey } = await getNavidromeCoverTarget(request);
-        await cacheRemoteArt(artUrl, cacheKey);
-        sendJson(response, 200, { ok: true });
+        const { palette } = await cacheRemoteArt(artUrl, cacheKey);
+        sendJson(response, 200, { ok: true, palette });
     } catch (error) {
         sendJson(response, error?.message === 'missing navidrome connection' ? 400 : 404, { error: error?.message || 'cover not found' });
     }
@@ -590,12 +598,143 @@ const getCoverCachePaths = (artUrl, cacheKey) => {
     };
 };
 
+const clampColor = (value) => Math.max(0, Math.min(255, Math.round(value)));
+const rgbToHex = ([red, green, blue]) => `#${[red, green, blue].map((channel) => clampColor(channel).toString(16).padStart(2, '0')).join('')}`;
+const colorToRgba = ([red, green, blue], alpha) => `rgba(${clampColor(red)}, ${clampColor(green)}, ${clampColor(blue)}, ${alpha})`;
+const mixColor = (color, target, amount) => color.map((channel, index) => channel + ((target[index] - channel) * amount));
+const getLuminance = ([red, green, blue]) => {
+    const [r, g, b] = [red, green, blue].map((channel) => {
+        const value = channel / 255;
+        return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+
+    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+};
+
+const buildPaletteFromAverage = (average) => {
+    const isDark = getLuminance(average) < 0.42;
+    const primary = isDark ? mixColor(average, [216, 243, 220], 0.32) : mixColor(average, [0, 62, 24], 0.18);
+    const secondary = isDark ? mixColor(average, [82, 183, 136], 0.48) : mixColor(average, [216, 243, 220], 0.46);
+    const text = isDark ? mixColor(average, [245, 255, 245], 0.9) : mixColor(average, [0, 35, 10], 0.86);
+    const shadow = isDark ? mixColor(average, [0, 0, 0], 0.74) : mixColor(average, [0, 20, 8], 0.78);
+    const surface = isDark ? mixColor(average, [0, 0, 0], 0.2) : mixColor(average, [255, 255, 255], 0.58);
+    const glow = isDark ? mixColor(average, [116, 198, 157], 0.42) : mixColor(average, [45, 106, 79], 0.36);
+    const sheen = isDark ? mixColor(average, [255, 255, 255], 0.64) : mixColor(average, [216, 243, 220], 0.7);
+
+    return {
+        primary: rgbToHex(primary),
+        secondary: rgbToHex(secondary),
+        text: rgbToHex(text),
+        shadow: rgbToHex(shadow),
+        surface: rgbToHex(surface),
+        glow: colorToRgba(glow, isDark ? 0.42 : 0.34),
+        sheen: colorToRgba(sheen, isDark ? 0.3 : 0.42),
+        overlay: isDark ? 'linear-gradient(rgba(255, 255, 255, 0.08), rgba(216, 243, 220, 0.2))' : 'linear-gradient(rgba(0, 35, 10, 0.08), rgba(0, 20, 8, 0.18))',
+        isDark,
+    };
+};
+
+const extractPpmAverage = (buffer) => {
+    let cursor = 0;
+    const readToken = () => {
+        while (cursor < buffer.length) {
+            const char = String.fromCharCode(buffer[cursor]);
+            if (/\s/.test(char)) {
+                cursor += 1;
+                continue;
+            }
+            if (char === '#') {
+                while (cursor < buffer.length && String.fromCharCode(buffer[cursor]) !== '\n') cursor += 1;
+                continue;
+            }
+            break;
+        }
+
+        const start = cursor;
+        while (cursor < buffer.length && !/\s/.test(String.fromCharCode(buffer[cursor]))) cursor += 1;
+        return buffer.toString('ascii', start, cursor);
+    };
+
+    if (readToken() !== 'P6') {
+        throw new Error('unsupported ppm');
+    }
+
+    const width = Number(readToken());
+    const height = Number(readToken());
+    const max = Number(readToken());
+    while (cursor < buffer.length && /\s/.test(String.fromCharCode(buffer[cursor]))) cursor += 1;
+
+    if (!width || !height || max <= 0) {
+        throw new Error('invalid ppm');
+    }
+
+    const pixelCount = width * height;
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    let count = 0;
+    const stride = Math.max(1, Math.floor(pixelCount / 4096));
+
+    for (let pixel = 0; pixel < pixelCount; pixel += stride) {
+        const index = cursor + (pixel * 3);
+        if (index + 2 >= buffer.length) break;
+        red += buffer[index];
+        green += buffer[index + 1];
+        blue += buffer[index + 2];
+        count += 1;
+    }
+
+    return count ? [red / count, green / count, blue / count] : [116, 198, 157];
+};
+
+const extractCoverPalette = async (imagePath) => {
+    if (!HAS_FILE_COMMAND) {
+        return buildPaletteFromAverage([116, 198, 157]);
+    }
+
+    try {
+        const ppm = await new Promise((resolve, reject) => {
+            execFile('file', ['--brief', '--mime-type', imagePath], { timeout: 1200 }, (mimeError, mimeStdout) => {
+                if (mimeError || !String(mimeStdout).startsWith('image/')) {
+                    reject(mimeError || new Error('not image'));
+                    return;
+                }
+
+                // Use ImageMagick when available, otherwise fall back to the spinach green palette.
+                execFile('magick', [imagePath, '-resize', '64x64!', 'ppm:-'], { timeout: 3500, maxBuffer: 1024 * 1024, encoding: 'buffer' }, (magickError, stdout) => {
+                    if (!magickError && stdout?.length) {
+                        resolve(stdout);
+                        return;
+                    }
+
+                    execFile('convert', [imagePath, '-resize', '64x64!', 'ppm:-'], { timeout: 3500, maxBuffer: 1024 * 1024, encoding: 'buffer' }, (convertError, convertStdout) => {
+                        if (convertError || !convertStdout?.length) {
+                            reject(convertError || magickError || new Error('palette unavailable'));
+                            return;
+                        }
+
+                        resolve(convertStdout);
+                    });
+                });
+            });
+        });
+
+        return buildPaletteFromAverage(extractPpmAverage(ppm));
+    } catch {
+        return buildPaletteFromAverage([116, 198, 157]);
+    }
+};
+
 const cacheRemoteArt = async (artUrl, cacheKey) => {
     const { imagePath, metaPath } = getCoverCachePaths(artUrl, cacheKey);
 
     try {
         const meta = JSON.parse(await readFile(metaPath, 'utf8'));
-        return { imagePath, contentType: meta.contentType || 'image/jpeg', cached: true };
+        if (!meta.palette) {
+            meta.palette = await extractCoverPalette(imagePath);
+            await writeFile(metaPath, JSON.stringify(meta));
+        }
+        return { imagePath, contentType: meta.contentType || 'image/jpeg', cached: true, palette: meta.palette };
     } catch {}
 
     const { buffer, contentType } = await fetchRemoteBinary(artUrl);
@@ -604,12 +743,11 @@ const cacheRemoteArt = async (artUrl, cacheKey) => {
     }
 
     await mkdir(COVER_CACHE_DIR, { recursive: true });
-    await Promise.all([
-        writeFile(imagePath, buffer),
-        writeFile(metaPath, JSON.stringify({ contentType, cachedAt: new Date().toISOString() })),
-    ]);
+    await writeFile(imagePath, buffer);
+    const palette = await extractCoverPalette(imagePath);
+    await writeFile(metaPath, JSON.stringify({ contentType, cachedAt: new Date().toISOString(), palette }));
 
-    return { imagePath, contentType, cached: false, buffer };
+    return { imagePath, contentType, cached: false, buffer, palette };
 };
 
 const sendCachedRemoteArt = async (artUrl, response, cacheKey) => {

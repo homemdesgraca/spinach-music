@@ -36,6 +36,7 @@ const libraryFetchControllers = {
 };
 
 const coverCache = new Map();
+const coverPaletteCache = new Map();
 const coverProgress = {
     mode: '',
     total: 0,
@@ -148,7 +149,45 @@ const updateCoverProgress = () => {
     libraryProgressTooltip.classList.toggle('is-visible', coverProgress.total > 0 && (coverProgress.active || deckMode === coverProgress.mode));
 };
 
-const applyCoverToCards = (coverKey, coverUrl) => {
+const applyPaletteToCard = (card, palette = null) => {
+    if (!card || !palette) {
+        return;
+    }
+
+    const vars = {
+        '--cover-a': palette.primary,
+        '--cover-b': palette.secondary,
+        '--card-text': palette.text,
+        '--card-shadow': palette.shadow,
+        '--card-surface': palette.surface,
+        '--card-glow': palette.glow,
+        '--card-sheen': palette.sheen,
+        '--card-cover-overlay': palette.overlay,
+    };
+
+    Object.entries(vars).forEach(([property, value]) => {
+        if (value) {
+            card.style.setProperty(property, value);
+        }
+    });
+
+    card.classList.add('has-cover-palette');
+    card.classList.toggle('is-dark-cover', Boolean(palette.isDark));
+};
+
+const applyPaletteToCards = (coverKey, palette) => {
+    if (!palette) {
+        return;
+    }
+
+    document.querySelectorAll('.library-card[data-cover-key]').forEach((card) => {
+        if (card.dataset.coverKey === coverKey) {
+            applyPaletteToCard(card, palette);
+        }
+    });
+};
+
+const applyCoverToCards = (coverKey, coverUrl, palette = null) => {
     if (!coverUrl) {
         return;
     }
@@ -157,6 +196,8 @@ const applyCoverToCards = (coverKey, coverUrl) => {
         if (card.dataset.coverKey !== coverKey) {
             return;
         }
+
+        applyPaletteToCard(card, palette);
 
         const cover = card.querySelector('.library-card-cover');
         if (!cover) {
@@ -196,7 +237,8 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
     candidates.forEach(({ item, key }) => {
         if (coverCache.has(key)) {
             item.coverUrl = coverCache.get(key) || '';
-            applyCoverToCards(key, item.coverUrl);
+            item.palette = coverPaletteCache.get(key) || item.palette || null;
+            applyCoverToCards(key, item.coverUrl, item.palette);
         }
     });
 
@@ -214,6 +256,7 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
                 }
 
                 const response = await fetch(url, { cache: 'no-store' });
+                const payload = await response.json().catch(() => ({}));
                 if (!response.ok) {
                     throw new Error('cover unavailable');
                 }
@@ -223,8 +266,12 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
                 }
 
                 coverCache.set(key, item.coverRequestUrl || '');
+                if (payload?.palette) {
+                    coverPaletteCache.set(key, payload.palette);
+                    item.palette = payload.palette;
+                }
                 item.coverUrl = item.coverRequestUrl || '';
-                applyCoverToCards(key, item.coverUrl);
+                applyCoverToCards(key, item.coverUrl, item.palette);
             } catch {
                 coverCache.set(key, '');
             } finally {
@@ -308,6 +355,7 @@ const fetchLibraryMode = async (mode, force = false) => {
                 coverRequestUrl,
                 coverCacheUrl: buildCoverUrl(item, CACHE_COVER_ENDPOINT)?.toString() || '',
                 coverUrl: coverCache.has(coverKey) ? (coverCache.get(coverKey) || '') : coverRequestUrl,
+                palette: coverPaletteCache.get(coverKey) || null,
                 colors: getCardColors(item.title, index),
             };
         });
@@ -335,6 +383,7 @@ const resetLibraryDeckData = () => {
     });
 
     coverCache.clear();
+    coverPaletteCache.clear();
     coverWarmupQueue = Promise.resolve();
     libraryDataRun += 1;
     coverProgress.mode = '';
@@ -534,7 +583,7 @@ const animateSubtitleIn = () => {
 };
 
 const createDeckCard = (item, index = 0) => {
-    const { title, subtitle = '', tracks = 0, colors = CARD_COLORS[0], type = 'album', countLabel = '', coverKey = '', coverUrl = '', isStatus = false } = item;
+    const { title, subtitle = '', tracks = 0, colors = CARD_COLORS[0], type = 'album', countLabel = '', coverKey = '', coverUrl = '', palette = null, isStatus = false } = item;
     const card = document.createElement('article');
     const titleElement = document.createElement('h3');
     const titleText = document.createElement('span');
@@ -556,6 +605,7 @@ const createDeckCard = (item, index = 0) => {
     card.style.setProperty('--card-tilt', tilt);
     card.style.setProperty('--cover-a', colors[0]);
     card.style.setProperty('--cover-b', colors[1]);
+    applyPaletteToCard(card, palette);
 
     titleElement.className = 'library-card-title';
     titleText.className = 'library-card-title-text';

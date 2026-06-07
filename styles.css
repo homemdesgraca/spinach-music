@@ -349,15 +349,37 @@ body.library-mode .library-deck {
     box-sizing: border-box;
     min-width: 0;
     padding: 0.9rem;
-    border: 2px solid var(--color-text);
+    border: 2px solid var(--card-text, var(--color-text));
     border-radius: 1.2rem 1.2rem 0.45rem 0.45rem;
-    background: var(--color-input-bg);
-    color: var(--color-text);
+    background:
+        linear-gradient(145deg, var(--card-sheen, rgba(216, 243, 220, 0.34)), transparent 42%),
+        linear-gradient(135deg, color-mix(in srgb, var(--cover-a, #95d5b2) 54%, var(--color-input-bg)), color-mix(in srgb, var(--cover-b, #40916c) 42%, var(--color-input-bg)));
+    color: var(--card-text, var(--color-text));
     font-family: var(--font-secondary);
-    box-shadow: 2px 3px 0 var(--color-shadow);
+    box-shadow: 2px 3px 0 var(--card-shadow, var(--color-shadow));
     transform: translate3d(0, 0, 0) rotate(var(--card-tilt, -1deg));
     user-select: none;
     will-change: transform;
+    isolation: isolate;
+    transition: border-color 260ms ease, color 260ms ease, box-shadow 260ms ease, background 260ms ease;
+}
+
+.library-card.has-cover-palette {
+    box-shadow:
+        0 0 1.25rem var(--card-glow, rgba(82, 183, 136, 0.28)),
+        2px 3px 0 var(--card-shadow, var(--color-shadow));
+}
+
+.library-card.has-cover-palette::before {
+    content: '';
+    position: absolute;
+    inset: 0.42rem;
+    z-index: -1;
+    border-radius: 0.95rem 0.95rem 0.34rem 0.34rem;
+    background:
+        radial-gradient(circle at 18% 16%, var(--card-sheen, rgba(216, 243, 220, 0.36)), transparent 34%),
+        radial-gradient(circle at 84% 22%, var(--card-glow, rgba(82, 183, 136, 0.28)), transparent 38%);
+    opacity: 0.92;
 }
 
 .library-card-title {
@@ -373,7 +395,7 @@ body.library-mode .library-deck {
     font-size: clamp(1.45rem, 2.45vw, 2.15rem);
     font-weight: 900;
     line-height: 0.98;
-    text-shadow: 1px 1px 0 var(--color-shadow);
+    text-shadow: 1px 1px 0 var(--card-shadow, var(--color-shadow));
     white-space: nowrap;
 }
 
@@ -407,13 +429,13 @@ body.library-mode .library-deck {
     position: relative;
     grid-row: 3;
     min-height: 0;
-    border: 2px solid var(--color-text);
+    border: 2px solid var(--card-text, var(--color-text));
     border-radius: 0.9rem 0.9rem 0.32rem 0.32rem;
     background:
         radial-gradient(circle at 28% 24%, rgba(216, 243, 220, 0.95) 0 12%, transparent 13%),
         radial-gradient(circle at 72% 34%, rgba(116, 198, 157, 0.9) 0 10%, transparent 11%),
         linear-gradient(135deg, var(--cover-a, #95d5b2), var(--cover-b, #40916c));
-    box-shadow: inset 0 0 0 0.18rem rgba(216, 243, 220, 0.32), 1px 2px 0 var(--color-shadow);
+    box-shadow: inset 0 0 0 0.18rem var(--card-sheen, rgba(216, 243, 220, 0.32)), 1px 2px 0 var(--card-shadow, var(--color-shadow));
     overflow: hidden;
 }
 
@@ -429,6 +451,16 @@ body.library-mode .library-deck {
 .library-card-cover.has-cover::before,
 .library-card-cover.has-cover::after {
     opacity: 0;
+}
+
+.library-card.has-cover-palette .library-card-cover.has-cover::before {
+    inset: 0;
+    z-index: 2;
+    border: 0;
+    border-radius: inherit;
+    background: var(--card-cover-overlay, linear-gradient(rgba(0, 35, 10, 0.08), rgba(0, 20, 8, 0.18)));
+    opacity: 1;
+    transform: none;
 }
 
 .library-card-cover::before {
@@ -464,16 +496,16 @@ body.library-mode .library-deck {
     position: absolute;
     right: 0.82rem;
     bottom: 0.82rem;
-    z-index: 2;
+    z-index: 3;
     padding: 0.34rem 0.52rem;
-    border: 2px solid var(--color-text);
+    border: 2px solid var(--card-text, var(--color-text));
     border-radius: 999px;
-    background: var(--color-surface);
-    color: var(--color-text);
+    background: var(--card-surface, var(--color-surface));
+    color: var(--card-text, var(--color-text));
     font-family: var(--font-secondary);
     font-size: 0.72rem;
     font-weight: 900;
-    box-shadow: 1px 2px 0 var(--color-shadow);
+    box-shadow: 1px 2px 0 var(--card-shadow, var(--color-shadow));
 }
 
 .lyrics-drawer {
@@ -952,8 +984,9 @@ body.library-mode .now-playing-bar {
     height: 2.55rem;
     border: 2px solid var(--color-text);
     border-radius: 50%;
-    background: var(--color-input-bg);
-    box-shadow: 1px 2px 0 var(--color-shadow);
+    background:
+        radial-gradient(circle at 48% 46%, var(--color-surface-hover) 0 0.34rem, var(--color-text) 0.36rem 0.42rem, var(--color-input-bg) 0.44rem 100%);
+    box-shadow: 1px 2px 0 var(--color-shadow), inset 0 0 0 0.12rem rgba(216, 243, 220, 0.22);
     overflow: hidden;
 }
 
@@ -963,11 +996,16 @@ body.library-mode .now-playing-bar {
     inset: 0;
     border-radius: 50%;
     background:
-        radial-gradient(circle at 28% 34%, transparent 0 0.52rem, var(--color-disc-line) 0.54rem 0.57rem, transparent 0.59rem 100%),
-        radial-gradient(circle at 72% 68%, transparent 0 0.46rem, var(--color-disc-line) 0.48rem 0.51rem, transparent 0.53rem 100%),
-        radial-gradient(circle at 48% 78%, transparent 0 0.7rem, var(--color-disc-line) 0.72rem 0.75rem, transparent 0.77rem 100%),
-        repeating-radial-gradient(circle, transparent 0 0.22rem, var(--color-disc-line) 0.24rem 0.255rem, transparent 0.28rem 0.42rem),
-        radial-gradient(circle, var(--color-input-bg) 0 18%, var(--color-shadow) 19% 23%, var(--color-surface-hover) 24% 52%, var(--color-text) 53% 56%, var(--color-input-bg) 57% 100%);
+        linear-gradient(112deg, transparent 0 42%, rgba(216, 243, 220, 0.62) 44% 47%, transparent 49% 100%) 66% 22% / 0.92rem 0.16rem no-repeat,
+        linear-gradient(119deg, transparent 0 42%, rgba(11, 93, 30, 0.38) 44% 47%, transparent 49% 100%) 23% 72% / 0.78rem 0.13rem no-repeat,
+        linear-gradient(104deg, transparent 0 42%, rgba(216, 243, 220, 0.48) 44% 47%, transparent 49% 100%) 74% 68% / 0.62rem 0.12rem no-repeat,
+        linear-gradient(124deg, transparent 0 42%, rgba(11, 93, 30, 0.32) 44% 47%, transparent 49% 100%) 31% 27% / 0.52rem 0.1rem no-repeat,
+        conic-gradient(from 18deg, rgba(255, 255, 255, 0.2), transparent 18deg 238deg, rgba(216, 243, 220, 0.18) 275deg, transparent 318deg),
+        repeating-radial-gradient(circle, transparent 0 0.16rem, var(--color-disc-line) 0.175rem 0.19rem, transparent 0.21rem 0.31rem),
+        radial-gradient(circle, transparent 0 0.46rem, var(--color-text) 0.48rem 0.52rem, transparent 0.54rem 0.78rem, var(--color-disc-line) 0.79rem 0.815rem, transparent 0.84rem 100%);
+    opacity: 0.94;
+    animation: disc-spin 0.85s linear infinite;
+    animation-play-state: paused;
 }
 
 .now-playing-disc::after {
@@ -976,20 +1014,24 @@ body.library-mode .now-playing-bar {
     z-index: 1;
     top: 50%;
     left: 50%;
-    width: 0.28rem;
-    height: 0.28rem;
+    width: 0.64rem;
+    height: 0.64rem;
+    border: 2px solid var(--color-text);
     border-radius: 50%;
-    background: var(--color-shadow);
+    background:
+        radial-gradient(circle, var(--color-shadow) 0 0.11rem, transparent 0.13rem),
+        radial-gradient(circle at 38% 34%, rgba(216, 243, 220, 0.78), var(--color-surface-hover) 52%, var(--color-input-bg));
+    box-shadow: 0 0 0 0.12rem rgba(216, 243, 220, 0.18);
     transform: translate(-50%, -50%);
 }
 
 .now-playing-bar.is-playing:not(.is-paused) .now-playing-disc::before {
-    animation: disc-spin 0.85s linear infinite;
+    animation-play-state: running;
 }
 
 .now-playing-bar.is-paused .now-playing-disc::before,
 .now-playing-bar.is-empty .now-playing-disc::before {
-    animation: none;
+    animation-play-state: paused;
 }
 
 .now-playing-face {
