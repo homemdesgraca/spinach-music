@@ -3,16 +3,31 @@ const navidromeUser = document.querySelector('#navidrome-user');
 const navidromePass = document.querySelector('#navidrome-pass');
 const navidromeConnect = document.querySelector('#navidrome-connect');
 const navidromeStatus = document.querySelector('#navidrome-status');
+const onboardingPanel = document.querySelector('.onboarding-panel');
+const onboardingUrl = document.querySelector('#onboarding-navidrome-url');
+const onboardingUser = document.querySelector('#onboarding-navidrome-user');
+const onboardingPass = document.querySelector('#onboarding-navidrome-pass');
+const onboardingConnect = document.querySelector('#onboarding-navidrome-connect');
+const onboardingStatus = document.querySelector('#onboarding-navidrome-status');
+const onboardingSkip = document.querySelector('.onboarding-skip');
 
 const STORAGE_KEY = 'spinachMusic.navidromeConnection';
+const ONBOARDING_SKIPPED_KEY = 'spinachMusic.onboardingSkipped';
 const DEFAULT_NAVIDROME_URL = 'http://127.0.0.1:4533/';
 const SUBSONIC_VERSION = '1.16.1';
 const CLIENT_NAME = 'spinach-music';
 
-const setStatus = (message, type = '') => {
-    navidromeStatus.textContent = message;
-    navidromeStatus.className = `connection-status navidrome-status ${type}`.trim();
+const setStatusText = (statusElement, message, type = '') => {
+    if (!statusElement) {
+        return;
+    }
+
+    statusElement.textContent = message;
+    statusElement.className = `connection-status navidrome-status ${type}`.trim();
 };
+
+const setStatus = (message, type = '') => setStatusText(navidromeStatus, message, type);
+const setOnboardingStatus = (message, type = '') => setStatusText(onboardingStatus, message, type);
 
 const getErrorMessage = (error) => {
     if (error?.message === 'Failed to fetch') {
@@ -25,28 +40,46 @@ const getErrorMessage = (error) => {
 let failedMoodTimeout;
 let isNavidromeConnected = false;
 
-const setNavidromeButtonText = (connected = false) => {
-    navidromeConnect.innerHTML = connected
+const setNavidromeButtonText = (connected = false, button = navidromeConnect) => {
+    if (!button) {
+        return;
+    }
+
+    button.innerHTML = connected
         ? 'connected :)<span class="disconnect-hint">disconnect</span>'
         : 'connect';
 };
 
-const setConnectButtonMood = (mood = '') => {
+const setAllNavidromeButtonText = (connected = false) => {
+    setNavidromeButtonText(connected, navidromeConnect);
+    setNavidromeButtonText(connected, onboardingConnect);
+};
+
+const setConnectButtonMood = (mood = '', button = navidromeConnect) => {
+    if (!button) {
+        return;
+    }
+
     clearTimeout(failedMoodTimeout);
-    navidromeConnect.classList.remove('connected', 'failed');
+    button.classList.remove('connected', 'failed');
 
     if (!mood) {
         return;
     }
 
-    void navidromeConnect.offsetWidth;
-    navidromeConnect.classList.add(mood);
+    void button.offsetWidth;
+    button.classList.add(mood);
 
     if (mood === 'failed') {
         failedMoodTimeout = setTimeout(() => {
-            navidromeConnect.classList.remove('failed');
+            button.classList.remove('failed');
         }, 1000);
     }
+};
+
+const setAllConnectButtonMoods = (mood = '') => {
+    setConnectButtonMood(mood, navidromeConnect);
+    setConnectButtonMood(mood, onboardingConnect);
 };
 
 const normalizeServerUrl = (rawUrl) => {
@@ -103,76 +136,138 @@ const loadConnection = () => {
 };
 
 const fillConnectionForm = (connection) => {
-    if (!connection) {
-        navidromeUrl.value = DEFAULT_NAVIDROME_URL;
-        return;
-    }
+    const url = connection?.url || DEFAULT_NAVIDROME_URL;
+    const username = connection?.username || '';
+    const password = connection?.password || '';
 
-    navidromeUrl.value = connection.url || DEFAULT_NAVIDROME_URL;
-    navidromeUser.value = connection.username || '';
-    navidromePass.value = connection.password || '';
+    navidromeUrl.value = url;
+    navidromeUser.value = username;
+    navidromePass.value = password;
+
+    if (onboardingUrl) {
+        onboardingUrl.value = url;
+    }
+    if (onboardingUser) {
+        onboardingUser.value = username;
+    }
+    if (onboardingPass) {
+        onboardingPass.value = password;
+    }
 };
 
 const notifyConnectionChange = () => {
     window.dispatchEvent(new CustomEvent('spinach:navidrome-connection-change'));
 };
 
+const hasCompleteConnection = (connection) => Boolean(connection?.url && connection?.username && connection?.password);
+
+const setOnboardingActive = (active) => {
+    document.documentElement.classList.toggle('onboarding-active', active);
+    document.body.classList.toggle('onboarding-active', active);
+    onboardingPanel?.setAttribute('aria-hidden', String(!active));
+
+    if (active) {
+        onboardingPanel?.removeAttribute('inert');
+        window.setTimeout(() => onboardingUrl?.focus({ preventScroll: true }), 280);
+        return;
+    }
+
+    onboardingPanel?.setAttribute('inert', '');
+};
+
+const refreshOnboardingState = () => {
+    const skipped = localStorage.getItem(ONBOARDING_SKIPPED_KEY) === 'true';
+    setOnboardingActive(!hasCompleteConnection(loadConnection()) && !skipped);
+};
+
+const readConnectionForm = (source = 'panel') => {
+    const useOnboarding = source === 'onboarding';
+
+    return {
+        url: (useOnboarding ? onboardingUrl?.value : navidromeUrl.value)?.trim() || '',
+        username: (useOnboarding ? onboardingUser?.value : navidromeUser.value)?.trim() || '',
+        password: (useOnboarding ? onboardingPass?.value : navidromePass.value) || '',
+    };
+};
+
 const disconnectNavidrome = () => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(ONBOARDING_SKIPPED_KEY);
     isNavidromeConnected = false;
-    setConnectButtonMood();
-    setNavidromeButtonText(false);
+    fillConnectionForm(null);
+    setAllConnectButtonMoods();
+    setAllNavidromeButtonText(false);
     setStatus('disconnected');
+    setOnboardingStatus('disconnected');
+    refreshOnboardingState();
     notifyConnectionChange();
 };
 
-const connectNavidrome = async () => {
-    if (isNavidromeConnected) {
+const connectNavidrome = async (source = 'panel') => {
+    if (isNavidromeConnected && source !== 'onboarding') {
         disconnectNavidrome();
         return;
     }
 
-    const connection = {
-        url: navidromeUrl.value.trim(),
-        username: navidromeUser.value.trim(),
-        password: navidromePass.value,
-    };
+    const connection = readConnectionForm(source);
+    const activeButton = source === 'onboarding' ? onboardingConnect : navidromeConnect;
+    const activeStatus = source === 'onboarding' ? setOnboardingStatus : setStatus;
 
-    setConnectButtonMood();
+    setConnectButtonMood('', activeButton);
 
     if (!connection.url || !connection.username || !connection.password) {
-        setNavidromeButtonText(false);
-        setStatus('fill in url, username, and password', 'error');
-        setConnectButtonMood('failed');
+        setNavidromeButtonText(false, activeButton);
+        activeStatus('fill in url, username, and password', 'error');
+        setConnectButtonMood('failed', activeButton);
         return;
     }
 
     try {
-        navidromeConnect.textContent = 'testing...';
-        setStatus('testing connection...');
+        activeButton.textContent = 'testing...';
+        activeStatus('testing connection...');
         await fetchSubsonic(connection.url, 'ping', connection);
         saveConnection(connection);
+        localStorage.removeItem(ONBOARDING_SKIPPED_KEY);
+        fillConnectionForm(connection);
         isNavidromeConnected = true;
-        setNavidromeButtonText(true);
+        setAllNavidromeButtonText(true);
         setStatus('', 'ok');
-        setConnectButtonMood('connected');
+        setOnboardingStatus('', 'ok');
+        setConnectButtonMood('connected', activeButton);
+        setOnboardingActive(false);
         notifyConnectionChange();
     } catch (error) {
         isNavidromeConnected = false;
-        setNavidromeButtonText(false);
-        setStatus(getErrorMessage(error), 'error');
-        setConnectButtonMood('failed');
+        setNavidromeButtonText(false, activeButton);
+        activeStatus(getErrorMessage(error), 'error');
+        setConnectButtonMood('failed', activeButton);
     }
 };
 
 const savedConnection = loadConnection();
 fillConnectionForm(savedConnection);
 
-if (savedConnection?.url && savedConnection?.username && savedConnection?.password) {
+if (hasCompleteConnection(savedConnection)) {
     isNavidromeConnected = true;
-    setNavidromeButtonText(true);
+    setAllNavidromeButtonText(true);
     setStatus('', 'ok');
-    setConnectButtonMood('connected');
+    setOnboardingStatus('', 'ok');
+    setAllConnectButtonMoods('connected');
 }
 
-navidromeConnect.addEventListener('click', connectNavidrome);
+refreshOnboardingState();
+
+navidromeConnect.addEventListener('click', () => connectNavidrome('panel'));
+onboardingConnect?.addEventListener('click', () => connectNavidrome('onboarding'));
+onboardingSkip?.addEventListener('click', () => {
+    localStorage.setItem(ONBOARDING_SKIPPED_KEY, 'true');
+    setOnboardingActive(false);
+});
+
+[onboardingUrl, onboardingUser, onboardingPass].forEach((input) => {
+    input?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            connectNavidrome('onboarding');
+        }
+    });
+});

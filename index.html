@@ -6,6 +6,20 @@
         <script>
             (() => {
                 try {
+                    const connection = JSON.parse(localStorage.getItem('spinachMusic.navidromeConnection') || 'null');
+                    const skippedOnboarding = localStorage.getItem('spinachMusic.onboardingSkipped') === 'true';
+                    const configured = connection?.url && connection?.username && connection?.password;
+
+                    if (!configured && !skippedOnboarding) {
+                        document.documentElement.classList.add('onboarding-active');
+                    }
+                } catch {
+                    document.documentElement.classList.add('onboarding-active');
+                }
+            })();
+
+            (() => {
+                try {
                     const coverTheme = JSON.parse(localStorage.getItem('spinachMusic.coverBackground') || 'null');
 
                     if (!coverTheme?.url) {
@@ -54,9 +68,9 @@
                 } catch {}
             })();
         </script>
-        <link rel="stylesheet" href="styles.css?v=27">
+        <link rel="stylesheet" href="styles.css?v=28">
         <link rel="stylesheet" href="config-menu.css?v=3">
-        <link rel="stylesheet" href="connections-panel.css">
+        <link rel="stylesheet" href="connections-panel.css?v=2">
 
     </head>
 
@@ -75,6 +89,31 @@
             <button class="config-card advanced-btn" type="button">advanced</button>
             <button class="config-card">about</button>
         </div>
+
+        <section class="onboarding-panel" aria-hidden="true">
+            <div class="onboarding-copy">
+                <p>hi! welcome to spinach, your eye-candy player :p</p>
+                <p>input your navidrome credentials below (or skip it if you're a bad person...)</p>
+            </div>
+            <div class="connection-card onboarding-card">
+                <h2>navidrome / subsonic</h2>
+                <label>
+                    server url
+                    <input id="onboarding-navidrome-url" type="text" value="http://127.0.0.1:4533/">
+                </label>
+                <label>
+                    username
+                    <input id="onboarding-navidrome-user" type="text">
+                </label>
+                <label>
+                    password
+                    <input id="onboarding-navidrome-pass" type="password">
+                </label>
+                <button class="connection-connect onboarding-connect" id="onboarding-navidrome-connect" type="button">connect</button>
+                <p class="connection-status navidrome-status" id="onboarding-navidrome-status" aria-live="polite"></p>
+            </div>
+            <button class="onboarding-skip" type="button">skip</button>
+        </section>
 
         <section class="theme-panel" aria-hidden="true">
             <button class="theme-close" type="button">close</button>
@@ -203,7 +242,7 @@
 
         <script src="menu.js?v=5"></script>
         <script src="sound.js?v=1"></script>
-        <script src="navidrome.js?v=11"></script>
+        <script src="navidrome.js?v=12"></script>
         <script src="player.js?v=4"></script>
         <script src="library-tabs.js?v=50"></script>
         <script src="now-playing.js?v=60"></script>

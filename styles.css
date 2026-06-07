@@ -107,23 +107,28 @@ body::after {
 }
 
 .top-section {
-    position: relative;
+    position: fixed;
+    top: 0;
+    left: 0;
     z-index: 1;
     display: flex;
     flex-direction: column;
     justify-content: left;
     align-items: flex-start;
+    pointer-events: none;
+    transform: translate(0, 0);
+    transition: top 1.05s cubic-bezier(0.16, 1, 0.3, 1), left 1.05s cubic-bezier(0.16, 1, 0.3, 1), transform 1.05s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .top-section .title-txt,
 .top-section .subtitle-txt {
     color: var(--color-text);
-    margin-left: 3%;
+    margin-left: 3vw;
     font-family: var(--font-main);
     font-weight: 900;
     letter-spacing: 0.04em;
     text-shadow: 1px 1px 0 var(--color-shadow);
-    transition: color 0.85s cubic-bezier(0.16, 1, 0.3, 1), text-shadow 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: color 0.85s cubic-bezier(0.16, 1, 0.3, 1), text-shadow 0.85s cubic-bezier(0.16, 1, 0.3, 1), margin 1.05s cubic-bezier(0.16, 1, 0.3, 1), font-size 1.05s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .top-section .title-txt,
@@ -157,6 +162,51 @@ body::after {
     transition: color 0.85s cubic-bezier(0.16, 1, 0.3, 1), text-shadow 0.85s cubic-bezier(0.16, 1, 0.3, 1), opacity 3.65s cubic-bezier(0.16, 1, 0.3, 1), transform 4.2s cubic-bezier(0.16, 1, 0.3, 1);
     animation-duration: 0.6s;
     animation-delay: 0.95s;
+}
+
+html.onboarding-active .top-section {
+    top: 18vh;
+    left: 50%;
+    z-index: 35;
+    align-items: center;
+    text-align: center;
+    transform: translateX(-50%);
+}
+
+html.onboarding-active .top-section .title-txt,
+html.onboarding-active .top-section .subtitle-txt {
+    margin-left: 0;
+    margin-right: 0;
+    animation-name: none;
+}
+
+html.onboarding-active .top-section .title-txt {
+    font-size: clamp(3.4rem, 8vw, 7rem);
+}
+
+html.onboarding-active .top-section .subtitle-txt {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+html.onboarding-active body::before {
+    filter: blur(0.9rem) saturate(0.82) brightness(0.94);
+    transform: scale(1.07);
+}
+
+html.onboarding-active .config-menu,
+html.onboarding-active .top-volume-tab,
+html.onboarding-active .library-tabs,
+html.onboarding-active .library-deck,
+html.onboarding-active .lyrics-drawer,
+html.onboarding-active .now-playing-bar,
+html.onboarding-active .theme-panel,
+html.onboarding-active .sound-panel,
+html.onboarding-active .advanced-panel,
+html.onboarding-active .connections-panel {
+    filter: blur(0.55rem) saturate(0.78);
+    opacity: 0.16;
+    pointer-events: none;
 }
 
 body.library-mode .top-section .subtitle-txt:not(.is-leaving) {
