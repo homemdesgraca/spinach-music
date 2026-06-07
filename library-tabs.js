@@ -73,23 +73,29 @@ const getCurrentTranslate = (element) => {
     return { x: matrix.m41, y: matrix.m42 };
 };
 
-const getTabCenterShift = (selectedTab) => {
+const getFocusedTabShift = (selectedTab) => {
     const tabsTranslate = getCurrentTranslate(libraryTabs);
     const tabRect = selectedTab.getBoundingClientRect();
     const visibleTabCenter = tabRect.left + tabRect.width / 2;
     const untransformedTabCenter = visibleTabCenter - tabsTranslate.x;
+    const untransformedTabTop = tabRect.top - tabsTranslate.y;
+    const deckBottom = libraryDeck ? libraryDeck.offsetTop + libraryDeck.offsetHeight : 0;
+    const targetY = deckBottom ? deckBottom - 2 - untransformedTabTop : tabsTranslate.y;
 
-    return window.innerWidth / 2 - untransformedTabCenter;
+    return {
+        x: window.innerWidth / 2 - untransformedTabCenter,
+        y: targetY,
+    };
 };
 
 const animateTabsToCenter = (selectedTab) => {
     const current = getCurrentTranslate(libraryTabs);
-    const targetX = getTabCenterShift(selectedTab);
-    const targetTransform = `translateX(${targetX}px)`;
+    const target = getFocusedTabShift(selectedTab);
+    const targetTransform = `translate(${target.x}px, ${target.y}px)`;
 
     tabsMoveAnimation?.cancel();
     libraryTabs.getAnimations().forEach((animation) => animation.cancel());
-    libraryTabs.style.setProperty('--library-tabs-shift', `${targetX}px`);
+    libraryTabs.style.setProperty('--library-tabs-shift', `${target.x}px`);
     libraryTabs.style.transform = `translate(${current.x}px, ${current.y}px)`;
 
     tabsMoveAnimation = libraryTabs.animate([

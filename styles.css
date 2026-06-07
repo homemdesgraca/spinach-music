@@ -219,6 +219,12 @@ body.library-mode .top-section .subtitle-txt:not(.is-leaving) {
 }
 
 .library-tabs.is-focused .library-tab.is-selected {
+    position: relative;
+    z-index: 4;
+    border-radius: 0.18rem 0.18rem 0.95rem 0.95rem;
+    border-top-color: var(--color-surface);
+    background: var(--color-surface);
+    box-shadow: 2px 5px 0 var(--color-shadow);
     transform: scale(1.04);
 }
 
