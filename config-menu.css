@@ -80,7 +80,8 @@
     transition-delay: 0.29s;
 }
 
-.theme-panel {
+.theme-panel,
+.sound-panel {
     position: fixed;
     top: 6.5rem;
     right: 3%;
@@ -99,18 +100,23 @@
     transition: opacity 0.2s ease-out, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.theme-panel.open {
+.theme-panel.open,
+.sound-panel.open {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0) scale(1);
 }
 
 .theme-panel h2,
-.theme-card p {
+.sound-panel h2,
+.theme-card p,
+.sound-card p,
+.sound-note {
     margin: 0;
 }
 
-.theme-panel h2 {
+.theme-panel h2,
+.sound-panel h2 {
     font-family: var(--font-main);
     font-size: 2rem;
     font-weight: 900;
@@ -118,7 +124,8 @@
     text-shadow: 1px 1px 0 var(--color-shadow);
 }
 
-.theme-close {
+.theme-close,
+.sound-close {
     float: right;
     margin-top: 0.15rem;
     border: none;
@@ -131,16 +138,19 @@
     transition: transform 0.18s ease-out, color 0.18s ease-out;
 }
 
-.theme-close:hover {
+.theme-close:hover,
+.sound-close:hover {
     color: var(--color-shadow);
     transform: translateY(-1px);
 }
 
-.theme-close:active {
+.theme-close:active,
+.sound-close:active {
     transform: translateY(1px) scale(0.97);
 }
 
-.theme-card {
+.theme-card,
+.sound-card {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -153,7 +163,13 @@
     color: var(--color-on-input);
 }
 
-.theme-toggle {
+.sound-source-options {
+    display: inline-flex;
+    gap: 0.35rem;
+}
+
+.theme-toggle,
+.sound-toggle {
     min-width: 3.4rem;
     padding: 0.28rem 0.5rem;
     border: 2px solid var(--color-text);
@@ -166,7 +182,16 @@
     box-shadow: 1px 2px 0 var(--color-shadow);
 }
 
-.theme-toggle.is-on {
+.theme-toggle.is-on,
+.sound-toggle.is-on {
     background: var(--color-text);
     color: var(--color-input-bg);
+}
+
+.sound-note {
+    margin-top: 0.72rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.25;
+    opacity: 0.76;
 }

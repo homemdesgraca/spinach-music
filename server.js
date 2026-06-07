@@ -10,6 +10,8 @@ const { fileURLToPath } = require('url');
 const PORT = 5500;
 const ROOT = __dirname;
 const COVER_CACHE_DIR = join(ROOT, '.cache', 'covers');
+const COVER_ART_SIZE = 768;
+const COVER_BACKGROUND_SIZE = 1600;
 const HAS_FILE_COMMAND = (() => {
     try {
         execFileSync('file', ['--version'], { stdio: 'ignore' });
@@ -99,7 +101,7 @@ const scoreSongMatch = (song, title, artist, album) => {
 };
 
 const readMpris = async () => {
-    const [positionRaw, durationRaw, status, title, artist, album, artUrl, player] = await Promise.all([
+    const [positionRaw, durationRaw, status, title, artist, album, artUrl, player, volumeRaw] = await Promise.all([
         runPlayerctl(['position']),
         runPlayerctl(['metadata', 'mpris:length']),
         runPlayerctl(['status']),
@@ -108,10 +110,12 @@ const readMpris = async () => {
         runPlayerctl(['metadata', 'xesam:album']),
         runPlayerctl(['metadata', 'mpris:artUrl']),
         runPlayerctl(['metadata', 'mpris:trackid']),
+        runPlayerctl(['volume']),
     ]);
 
     const position = Number.parseFloat(positionRaw);
     const durationMicros = Number.parseFloat(durationRaw);
+    const volume = Number.parseFloat(volumeRaw);
     const cleanArtUrl = firstLine(artUrl);
 
     return {
@@ -122,6 +126,7 @@ const readMpris = async () => {
         coverUrl: cleanArtUrl ? '/mpris/art' : '',
         position: Number.isFinite(position) ? position : null,
         duration: Number.isFinite(durationMicros) ? durationMicros / 1000000 : null,
+        volume: Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : null,
         status: firstLine(status).toLowerCase() || 'unknown',
         trackId: firstLine(player) || [title, artist, album, durationRaw].join('|'),
     };
@@ -174,14 +179,17 @@ const getNavidromeConnection = (searchParams) => ({
     password: firstLine(searchParams.get('password')),
 });
 
-const buildNavidromeUrl = (connection, endpoint, params = {}) => {
+const buildNavidromeUrl = (connection, endpoint, params = {}, options = {}) => {
     const url = new URL(`rest/${endpoint}.view`, normalizeServerUrl(connection.url));
 
     url.searchParams.set('u', connection.username);
     url.searchParams.set('p', connection.password);
     url.searchParams.set('v', '1.16.1');
     url.searchParams.set('c', 'spinach-music');
-    url.searchParams.set('f', 'json');
+
+    if (options.json !== false) {
+        url.searchParams.set('f', 'json');
+    }
 
     Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null && String(value).length) {
@@ -218,6 +226,13 @@ const lineEntriesToLrc = (entries = []) => entries
     .map((entry) => `${formatTimeTag(Number(entry.start) / 1000)} ${String(entry.value).trim()}`)
     .join('\n');
 
+const normalizePlainLyricsText = (value) => String(value || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim();
+
 const structuredEntryToLyrics = (entry) => {
     if (!entry) {
         return null;
@@ -228,12 +243,12 @@ const structuredEntryToLyrics = (entry) => {
         : Array.isArray(entry.line) ? entry.line : [];
 
     const syncedLyrics = lineEntriesToLrc(lineEntries);
-    const plainLyrics = (Array.isArray(entry.line) && entry.line.length
+    const plainLyrics = normalizePlainLyricsText((Array.isArray(entry.line) && entry.line.length
         ? entry.line
         : lineEntries)
         .map((line) => String(line.value || '').trim())
         .filter(Boolean)
-        .join('\n');
+        .join('\n'));
 
     return {
         source: 'navidrome-structured',
@@ -264,6 +279,17 @@ const normalizeLibraryItem = (item, mode, index) => {
         type: mode === 'albums' ? 'album' : 'artist',
     };
 };
+
+const normalizeSongItem = (song, index = 0) => ({
+    id: firstLine(song?.id || `song-${index}`),
+    title: firstLine(song?.title || song?.name || 'untitled'),
+    artist: firstLine(song?.artist || song?.displayArtist || ''),
+    album: firstLine(song?.album || ''),
+    duration: Number.isFinite(Number(song?.duration)) ? Number(song.duration) : null,
+    coverArt: firstLine(song?.coverArt || ''),
+    track: Number.isFinite(Number(song?.track)) ? Number(song.track) : index + 1,
+    type: 'song',
+});
 
 const getNavidromeLibraryItems = async (connection, mode) => {
     if (mode === 'artists') {
@@ -305,6 +331,117 @@ const sendNavidromeLibrary = async (request, response) => {
     }
 };
 
+const getNavidromeTrackItems = async (connection, type, id, title) => {
+    if (type === 'artist') {
+        const topPayload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getTopSongs', {
+            artist: title,
+            count: 60,
+        }).toString()).catch(() => null);
+        const topSongs = asList(topPayload?.['subsonic-response']?.topSongs?.song)
+            .map(normalizeSongItem)
+            .filter((song) => song.id && song.title);
+
+        if (topSongs.length) {
+            return topSongs;
+        }
+
+        const artistPayload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getArtist', { id }).toString());
+        const firstAlbum = asList(artistPayload?.['subsonic-response']?.artist?.album)[0];
+        if (!firstAlbum?.id) {
+            return [];
+        }
+
+        const albumPayload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getAlbum', { id: firstAlbum.id }).toString());
+        return asList(albumPayload?.['subsonic-response']?.album?.song)
+            .map(normalizeSongItem)
+            .filter((song) => song.id && song.title);
+    }
+
+    const payload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getAlbum', { id }).toString());
+    return asList(payload?.['subsonic-response']?.album?.song)
+        .map(normalizeSongItem)
+        .filter((song) => song.id && song.title)
+        .sort((a, b) => a.track - b.track);
+};
+
+const sendNavidromeTracks = async (request, response) => {
+    const searchParams = new URL(request.url, `http://${request.headers.host}`).searchParams;
+    const connection = getNavidromeConnection(searchParams);
+    const type = firstLine(searchParams.get('type')) === 'artist' ? 'artist' : 'album';
+    const id = firstLine(searchParams.get('id'));
+    const title = firstLine(searchParams.get('title'));
+
+    if (!connection.url || !connection.username || !connection.password || !id) {
+        sendJson(response, 400, { error: 'missing navidrome connection or item id' });
+        return;
+    }
+
+    try {
+        const tracks = await getNavidromeTrackItems(connection, type, id, title);
+        sendJson(response, 200, { type, id, tracks });
+    } catch (error) {
+        sendJson(response, 502, { error: error?.message || 'failed to fetch navidrome tracks' });
+    }
+};
+
+const proxyRemoteStream = (remoteUrl, request, response) => new Promise((resolve) => {
+    const target = new URL(remoteUrl);
+    const client = target.protocol === 'https:' ? https : http;
+    const headers = {
+        'user-agent': 'spinach-music/1.0',
+        accept: request.headers.accept || '*/*',
+    };
+
+    if (request.headers.range) {
+        headers.range = request.headers.range;
+    }
+
+    const proxy = client.request(target, { method: 'GET', headers }, (remoteResponse) => {
+        const responseHeaders = {
+            'content-type': remoteResponse.headers['content-type'] || 'audio/mpeg',
+            'accept-ranges': remoteResponse.headers['accept-ranges'] || 'bytes',
+            'cache-control': 'no-store',
+        };
+
+        ['content-length', 'content-range', 'etag', 'last-modified'].forEach((header) => {
+            if (remoteResponse.headers[header]) {
+                responseHeaders[header] = remoteResponse.headers[header];
+            }
+        });
+
+        response.writeHead(remoteResponse.statusCode || 200, responseHeaders);
+        remoteResponse.pipe(response);
+        remoteResponse.on('end', resolve);
+    });
+
+    proxy.on('error', () => {
+        if (!response.headersSent) {
+            sendJson(response, 502, { error: 'stream failed' });
+        } else {
+            response.destroy();
+        }
+        resolve();
+    });
+
+    request.on('aborted', () => proxy.destroy());
+    response.on('close', () => proxy.destroy());
+    proxy.end();
+});
+
+const sendNavidromeStream = async (request, response) => {
+    const searchParams = new URL(request.url, `http://${request.headers.host}`).searchParams;
+    const connection = getNavidromeConnection(searchParams);
+    const id = firstLine(searchParams.get('id'));
+
+    if (!connection.url || !connection.username || !connection.password || !id) {
+        sendJson(response, 400, { error: 'missing navidrome connection or song id' });
+        return;
+    }
+
+    const streamUrl = buildNavidromeUrl(connection, 'stream', { id }, { json: false }).toString();
+    await proxyRemoteStream(streamUrl, request, response);
+};
+
 const getNavidromeCoverTarget = async (request) => {
     const searchParams = new URL(request.url, `http://${request.headers.host}`).searchParams;
     const connection = getNavidromeConnection(searchParams);
@@ -312,6 +449,8 @@ const getNavidromeCoverTarget = async (request) => {
     const coverArt = firstLine(searchParams.get('coverArt'));
     const imageUrl = firstLine(searchParams.get('imageUrl'));
     const type = firstLine(searchParams.get('type'));
+    const requestedSize = Number.parseInt(searchParams.get('size'), 10);
+    const coverSize = requestedSize === COVER_BACKGROUND_SIZE ? COVER_BACKGROUND_SIZE : COVER_ART_SIZE;
 
     if (!connection.url || !connection.username || !connection.password) {
         throw new Error('missing navidrome connection');
@@ -327,9 +466,9 @@ const getNavidromeCoverTarget = async (request) => {
         return {
             artUrl: buildNavidromeUrl(connection, 'getCoverArt', {
                 id: coverArt,
-                size: 512,
+                size: coverSize,
             }).toString(),
-            cacheKey: `${cachePrefix}|coverArt|${coverArt}`,
+            cacheKey: `${cachePrefix}|coverArt|${coverArt}|size:${coverSize}`,
         };
     }
 
@@ -429,7 +568,7 @@ const sendNavidromeLyrics = async (request, response) => {
         const chosen = selectStructuredEntry(structured);
         const normalized = structuredEntryToLyrics(chosen);
 
-        if (normalized?.syncedLyrics) {
+        if (normalized?.syncedLyrics || normalized?.plainLyrics) {
             sendJson(response, 200, {
                 ...normalized,
                 source: 'navidrome-structured',
@@ -443,7 +582,7 @@ const sendNavidromeLyrics = async (request, response) => {
             artist,
             album,
         }).toString());
-        const text = firstLine(plain?.['subsonic-response']?.lyrics?.value || plain?.['subsonic-response']?.lyrics?.text || '');
+        const text = normalizePlainLyricsText(plain?.['subsonic-response']?.lyrics?.value || plain?.['subsonic-response']?.lyrics?.text || '');
 
         if (text) {
             sendJson(response, 200, {
@@ -463,7 +602,7 @@ const sendNavidromeLyrics = async (request, response) => {
                 artist,
                 album,
             }).toString());
-            const text = firstLine(plain?.['subsonic-response']?.lyrics?.value || plain?.['subsonic-response']?.lyrics?.text || '');
+            const text = normalizePlainLyricsText(plain?.['subsonic-response']?.lyrics?.value || plain?.['subsonic-response']?.lyrics?.text || '');
 
             if (text) {
                 sendJson(response, 200, {
@@ -816,6 +955,19 @@ const sendMprisControl = async (request, response) => {
         return;
     }
 
+    if (action === 'volume') {
+        const volume = Number.parseFloat(searchParams.get('volume'));
+
+        if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+            sendJson(response, 400, { error: 'bad volume' });
+            return;
+        }
+
+        await runPlayerctl(['volume', String(volume)]);
+        sendJson(response, 200, { ok: true, volume });
+        return;
+    }
+
     const command = {
         previous: 'previous',
         back: 'previous',
@@ -880,6 +1032,16 @@ const server = http.createServer(async (request, response) => {
 
     if (pathname === '/navidrome/library') {
         await sendNavidromeLibrary(request, response);
+        return;
+    }
+
+    if (pathname === '/navidrome/tracks') {
+        await sendNavidromeTracks(request, response);
+        return;
+    }
+
+    if (pathname === '/navidrome/stream') {
+        await sendNavidromeStream(request, response);
         return;
     }
 

@@ -598,6 +598,11 @@ const createDeckCard = (item, index = 0) => {
 
     card.className = 'library-card';
     card.classList.toggle('is-status-card', Boolean(isStatus));
+    card.tabIndex = isStatus ? -1 : 0;
+    if (!isStatus) {
+        card.setAttribute('role', 'button');
+        card.setAttribute('aria-label', `play ${title}`);
+    }
     card.dataset.tilt = tilt;
     if (coverKey) {
         card.dataset.coverKey = coverKey;
@@ -946,6 +951,38 @@ libraryDeck?.addEventListener('wheel', (event) => {
     event.preventDefault();
     queueDeckScroll(event.deltaY || event.deltaX);
 }, { passive: false });
+
+const playDeckCard = (card) => {
+    if (!card || card.classList.contains('is-status-card')) {
+        return;
+    }
+
+    const itemIndex = Number.parseInt(card.dataset.itemIndex, 10);
+    const item = deckBaseCards[itemIndex];
+    if (!item) {
+        return;
+    }
+
+    window.spinachPlayer?.playLibraryItem?.(item);
+};
+
+libraryDeckTrack?.addEventListener('click', (event) => {
+    playDeckCard(event.target.closest('.library-card'));
+});
+
+libraryDeckTrack?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+    }
+
+    const card = event.target.closest('.library-card');
+    if (!card) {
+        return;
+    }
+
+    event.preventDefault();
+    playDeckCard(card);
+});
 
 window.addEventListener('resize', () => {
     if (activeLibraryTab) {

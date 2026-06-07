@@ -8,6 +8,8 @@ const nowPlayingCover = document.querySelector('#now-playing-cover');
 const nowPlayingTimer = document.querySelector('#now-playing-timer');
 const nowPlayingStatusPill = document.querySelector('.now-playing-status-pill');
 const nowPlayingProgress = document.querySelector('#now-playing-progress');
+const playerVolumeSlider = document.querySelector('#player-volume-slider');
+const playerVolumeValue = document.querySelector('#player-volume-value');
 const progressTimeBubble = document.querySelector('#progress-time-bubble');
 const nowPlayingTitleLine = document.querySelector('.now-playing-title-line');
 const nowPlayingArtistLine = document.querySelector('.now-playing-artist-line');
@@ -28,6 +30,9 @@ const MPRIS_POLL_INTERVAL = 1000;
 const ADAPTIVE_COLORS_STORAGE_KEY = 'spinachMusic.adaptiveCoverColors';
 const COVER_BACKGROUND_STORAGE_KEY = 'spinachMusic.coverBackground';
 const NAVIDROME_STORAGE_KEY = 'spinachMusic.navidromeConnection';
+const PLAYER_SOURCE_STORAGE_KEY = 'spinachMusic.playerSource';
+const VOLUME_STORAGE_KEY = 'spinachMusic.volume';
+const LAST_SONG_STORAGE_KEY = 'spinachMusic.lastSong';
 const SUBSONIC_VERSION = '1.16.1';
 const CLIENT_NAME = 'spinach-music';
 
@@ -45,6 +50,13 @@ const defaultTheme = {
 
 let isFetchingMpris = false;
 let playbackState = 'stopped';
+let playerSource = localStorage.getItem(PLAYER_SOURCE_STORAGE_KEY) === 'mpris' ? 'mpris' : 'navidrome';
+let renderedPlayerSource = '';
+let forceNextPlayerRender = true;
+let mprisPollTimer;
+let mprisFetchRun = 0;
+let pendingForcedMprisRefresh = false;
+let mprisVolumeTimer;
 let lastTrackId = '';
 let lastCoverUrl = '';
 const marquees = new Map();
@@ -53,6 +65,7 @@ let isScrubbingProgress = false;
 let currentDuration = 0;
 let currentCoverUrl = '';
 let appliedCoverBackgroundUrl = '';
+let appliedCoverBackgroundIdentity = '';
 let currentSongData = null;
 let lastLyricsKey = '';
 let lyricsEntries = [];
@@ -65,11 +78,17 @@ let lyricsResizeAnimation;
 let lyricsRenderTimer;
 
 try {
-    appliedCoverBackgroundUrl = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null')?.url || '';
+    const savedCoverBackground = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null');
+    appliedCoverBackgroundUrl = savedCoverBackground?.url || '';
+    appliedCoverBackgroundIdentity = savedCoverBackground?.identity || '';
 } catch {}
 
 let coverBackgroundEnabled = true;
 let adaptiveCoverColorsEnabled = localStorage.getItem(ADAPTIVE_COLORS_STORAGE_KEY) !== 'false';
+
+const getPlayerSource = () => localStorage.getItem(PLAYER_SOURCE_STORAGE_KEY) === 'mpris' ? 'mpris' : 'navidrome';
+
+const isMprisSource = () => playerSource === 'mpris';
 
 const normalizePlaybackState = (state) => {
     const normalized = String(state || '').toLowerCase();
@@ -261,6 +280,25 @@ const renderLyrics = (entries, plainLyrics = '', options = {}) => {
     }, options.delayShrink ? 420 : 0);
 };
 
+const resetLyricsState = (status = 'tap the card to fetch lyrics', options = {}) => {
+    lyricsAbortController?.abort();
+    lyricsFetchToken += 1;
+    clearTimeout(lyricsRenderTimer);
+    lyricsResizeAnimation?.cancel();
+    lyricsResizeAnimation = null;
+    if (lyricsCard) {
+        lyricsCard.style.height = '';
+    }
+    currentSongData = options.clearSong === false ? currentSongData : null;
+    lastLyricsKey = '';
+    lyricsEntries = [];
+    activeLyricsIndex = -1;
+    isFetchingLyrics = false;
+    pendingLyricsRefresh = false;
+    renderLyrics([], '', { delayShrink: Boolean(options.delayShrink) });
+    setLyricsStatus(status);
+};
+
 const syncLyricsToPosition = (position) => {
     if (!lyricsEntries.length || !lyricsLines || !Number.isFinite(position)) {
         return;
@@ -410,7 +448,89 @@ const formatCoverIdentity = (data, fallbackTrackId) => {
     return data.artUrl || fallbackTrackId;
 };
 
+const getCoverBackgroundIdentity = (data = {}, coverUrl = '') => {
+    const album = String(data.album || '').trim().toLowerCase();
+
+    if (album) {
+        return `album:${album}`;
+    }
+
+    const artist = String(data.artist || '').trim().toLowerCase();
+    const title = String(data.title || '').trim().toLowerCase();
+
+    return artist || title ? `track:${artist}:${title}` : `cover:${coverUrl}`;
+};
+
+const getStableCoverBackgroundUrl = (coverUrl) => {
+    if (!coverUrl) {
+        return '';
+    }
+
+    try {
+        const url = new URL(coverUrl, window.location.origin);
+
+        if (url.pathname === '/navidrome/cover' && url.searchParams.get('coverArt')) {
+            url.searchParams.delete('id');
+            url.searchParams.delete('art');
+            url.searchParams.set('size', '1600');
+        }
+
+        return url.pathname === '/mpris/art'
+            ? `${url.pathname}${url.search}`
+            : url.toString();
+    } catch {
+        return coverUrl;
+    }
+};
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const getSavedLastSong = () => {
+    try {
+        return JSON.parse(localStorage.getItem(LAST_SONG_STORAGE_KEY) || 'null');
+    } catch {
+        return null;
+    }
+};
+const saveLastSong = (data = {}) => {
+    if (!(data.title || data.artist || data.album)) {
+        return;
+    }
+
+    const nextTrackId = data.trackId || [data.title, data.artist, data.album, data.duration].join('|');
+    localStorage.setItem(LAST_SONG_STORAGE_KEY, JSON.stringify({
+        source: data.source || playerSource,
+        title: data.title || '',
+        artist: data.artist || '',
+        album: data.album || '',
+        coverUrl: data.coverUrl || data.artUrl || '',
+        position: Number.isFinite(Number(data.position)) ? Number(data.position) : 0,
+        duration: Number.isFinite(Number(data.duration)) ? Number(data.duration) : null,
+        trackId: nextTrackId,
+        savedAt: Date.now(),
+    }));
+};
+const getStoredVolume = () => {
+    const stored = Number.parseFloat(localStorage.getItem(VOLUME_STORAGE_KEY));
+    return Number.isFinite(stored) ? clamp(stored, 0, 1) : 0.82;
+};
+const setVolumeSlider = (volume, persist = false) => {
+    if (!playerVolumeSlider || !Number.isFinite(volume)) {
+        return;
+    }
+
+    const safeVolume = clamp(volume, 0, 1);
+    const percent = Math.round(safeVolume * 100);
+    playerVolumeSlider.value = String(percent);
+    playerVolumeSlider.style.setProperty('--progress', `${percent}%`);
+    playerVolumeSlider.setAttribute('aria-valuetext', `${percent}%`);
+    if (playerVolumeValue) {
+        playerVolumeValue.textContent = `${percent}%`;
+    }
+
+    if (persist) {
+        localStorage.setItem(VOLUME_STORAGE_KEY, String(safeVolume));
+    }
+};
 const mixColor = (color, target, amount) => color.map((channel, index) => Math.round(channel + (target[index] - channel) * amount));
 const colorToRgb = (color) => `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 const colorToRgba = (color, alpha) => `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
@@ -447,6 +567,7 @@ const resetCoverBackground = (disableBackground = false) => {
     document.body.classList.remove('has-cover-theme');
     root.classList.remove('has-cover-theme');
     appliedCoverBackgroundUrl = '';
+    appliedCoverBackgroundIdentity = '';
     root.style.setProperty('--cover-bg-opacity', '0');
     root.style.setProperty('--cover-bg-scale', '1.035');
     window.setTimeout(() => {
@@ -604,12 +725,24 @@ const applyCoverBackground = () => {
                 ? 'linear-gradient(rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.28))'
                 : 'linear-gradient(rgba(0, 35, 10, 0.16), rgba(0, 35, 10, 0.22))';
 
-        crossfadeCoverBackground(currentCoverUrl);
+        const backgroundCoverUrl = getStableCoverBackgroundUrl(currentCoverUrl);
+        const backgroundIdentity = getCoverBackgroundIdentity(currentSongData, currentCoverUrl);
+        const isSameBackground = backgroundIdentity && backgroundIdentity === appliedCoverBackgroundIdentity;
+
+        if (!isSameBackground) {
+            crossfadeCoverBackground(backgroundCoverUrl);
+            appliedCoverBackgroundIdentity = backgroundIdentity;
+        } else {
+            root.style.setProperty('--cover-bg-opacity', '1');
+            root.style.setProperty('--cover-bg-scale', '1');
+        }
+
         root.style.setProperty('--cover-readable-overlay', overlay);
         root.classList.add('has-cover-theme');
         document.body.classList.add('has-cover-theme');
         localStorage.setItem(COVER_BACKGROUND_STORAGE_KEY, JSON.stringify({
-            url: currentCoverUrl,
+            url: isSameBackground ? appliedCoverBackgroundUrl || backgroundCoverUrl : backgroundCoverUrl,
+            identity: backgroundIdentity,
             overlay,
             pageBg: colorToRgb(average),
         }));
@@ -814,28 +947,62 @@ const setNowPlayingText = (title, state = 'empty', coverUrl = '', meta = {}) => 
     queueNowPlayingMarquees();
 };
 
-const setMprisSong = (data) => {
+const showSavedLastSong = (statusText = 'last played') => {
+    const saved = getSavedLastSong();
+
+    if (!(saved?.title || saved?.artist || saved?.album)) {
+        return false;
+    }
+
+    const nextTrackId = saved.trackId || [saved.title, saved.artist, saved.album, saved.duration].join('|');
+    const coverIdentity = formatCoverIdentity(saved, nextTrackId);
+    const coverSeparator = saved.coverUrl?.includes('?') ? '&' : '?';
+    const coverUrl = saved.coverUrl ? `${saved.coverUrl}${coverSeparator}art=${encodeURIComponent(coverIdentity)}` : '';
+
+    currentSongData = { ...saved, status: 'stopped' };
+    setPlaybackState('stopped');
+    nowPlayingTimer.textContent = statusText;
+    updateStatusPillWidth();
+    setProgressSlider(saved.position, saved.duration);
+    setNowPlayingText(saved.title || 'unknown song', 'playing', coverUrl, formatSongMeta(saved.album, saved.artist));
+    lastTrackId = nextTrackId;
+    lastCoverUrl = coverUrl;
+    resetLyricsState('tap the card to fetch lyrics', { delayShrink: true });
+    return true;
+};
+
+const setPlayerSong = (data) => {
     const state = normalizePlaybackState(data.status);
     const hasSong = Boolean(data.title || data.artist || data.album);
+    const incomingSource = data.source || playerSource;
+    const sourceChanged = incomingSource !== renderedPlayerSource;
+    const shouldForceRender = forceNextPlayerRender || sourceChanged;
 
+    forceNextPlayerRender = false;
+    renderedPlayerSource = incomingSource;
     currentSongData = data;
+    if (Number.isFinite(Number(data.volume))) {
+        setVolumeSlider(Number(data.volume), true);
+    }
     setPlaybackState(state);
     nowPlayingTimer.textContent = `${formatPlaybackTime(data.position)} / ${formatPlaybackTime(data.duration)}`;
     updateStatusPillWidth();
     setProgressSlider(data.position, data.duration);
 
+    if (hasSong) {
+        saveLastSong(data);
+    }
+
     if (!hasSong || state === 'stopped') {
-        lyricsAbortController?.abort();
-        currentSongData = null;
+        if (showSavedLastSong(isMprisSource() && !hasSong ? 'mpris stopped' : 'last played')) {
+            return;
+        }
+
+        nowPlayingTimer.textContent = isMprisSource() ? 'mpris stopped' : 'choose an album or artist';
+        updateStatusPillWidth();
+        resetLyricsState('tap the card to fetch lyrics', { delayShrink: true });
         lastTrackId = '';
         lastCoverUrl = '';
-        lastLyricsKey = '';
-        lyricsEntries = [];
-        activeLyricsIndex = -1;
-        isFetchingLyrics = false;
-        pendingLyricsRefresh = false;
-        renderLyrics([], '', { delayShrink: true });
-        setLyricsStatus('tap the card to fetch lyrics');
         setProgressSlider(null, null);
         setNowPlayingText('nothing playing', 'empty');
         return;
@@ -843,9 +1010,10 @@ const setMprisSong = (data) => {
 
     const nextTrackId = data.trackId || [data.title, data.artist, data.album, data.duration].join('|');
     const coverIdentity = formatCoverIdentity(data, nextTrackId);
-    const coverUrl = data.coverUrl ? `${data.coverUrl}?art=${encodeURIComponent(coverIdentity)}` : '';
+    const coverSeparator = data.coverUrl?.includes('?') ? '&' : '?';
+    const coverUrl = data.coverUrl ? `${data.coverUrl}${coverSeparator}art=${encodeURIComponent(coverIdentity)}` : '';
 
-    if (nextTrackId !== lastTrackId || coverUrl !== lastCoverUrl) {
+    if (shouldForceRender || nextTrackId !== lastTrackId || coverUrl !== lastCoverUrl) {
         setNowPlayingText(
             data.title || 'unknown song',
             'playing',
@@ -861,10 +1029,17 @@ const setMprisSong = (data) => {
     }
 };
 
-const fetchMprisSong = async () => {
-    if (isFetchingMpris) {
+const fetchMprisSong = async ({ force = false } = {}) => {
+    if (!isMprisSource()) {
         return;
     }
+
+    if (isFetchingMpris) {
+        pendingForcedMprisRefresh = pendingForcedMprisRefresh || force;
+        return;
+    }
+
+    const run = ++mprisFetchRun;
 
     try {
         isFetchingMpris = true;
@@ -874,15 +1049,34 @@ const fetchMprisSong = async () => {
             throw new Error('mpris unavailable');
         }
 
-        setMprisSong(await response.json());
+        if (run !== mprisFetchRun || !isMprisSource()) {
+            return;
+        }
+
+        if (force) {
+            forceNextPlayerRender = true;
+        }
+
+        setPlayerSong({ ...await response.json(), source: 'mpris' });
     } catch {
-        setPlaybackState('stopped');
-        nowPlayingTimer.textContent = 'mpris unavailable';
-        updateStatusPillWidth();
-        setProgressSlider(null, null);
-        setNowPlayingText('nothing playing', 'empty');
+        if (run !== mprisFetchRun || !isMprisSource()) {
+            return;
+        }
+
+        if (!showSavedLastSong('mpris unavailable')) {
+            setPlaybackState('stopped');
+            nowPlayingTimer.textContent = 'mpris unavailable';
+            updateStatusPillWidth();
+            setProgressSlider(null, null);
+            setNowPlayingText('nothing playing', 'empty');
+        }
     } finally {
         isFetchingMpris = false;
+
+        if (pendingForcedMprisRefresh && isMprisSource()) {
+            pendingForcedMprisRefresh = false;
+            fetchMprisSong({ force: true });
+        }
     }
 };
 
@@ -902,11 +1096,52 @@ const sendMprisControl = async (action, params = {}) => {
     }
 };
 
+const sendPlayerControl = (action, params = {}) => {
+    if (isMprisSource()) {
+        sendMprisControl(action, params);
+        return;
+    }
+
+    window.spinachPlayer?.control?.(action, params);
+};
+
+const sendPlayerVolume = (volume, immediate = false) => {
+    const safeVolume = clamp(volume, 0, 1);
+    setVolumeSlider(safeVolume, true);
+
+    if (!isMprisSource()) {
+        window.spinachPlayer?.control?.('volume', { volume: String(safeVolume) });
+        return;
+    }
+
+    clearTimeout(mprisVolumeTimer);
+    const send = () => sendMprisControl('volume', { volume: String(safeVolume) });
+
+    if (immediate) {
+        send();
+        return;
+    }
+
+    mprisVolumeTimer = setTimeout(send, 90);
+};
+
 playerControls.forEach((control) => {
     control.addEventListener('click', () => {
-        sendMprisControl(control.dataset.mprisAction);
+        sendPlayerControl(control.dataset.mprisAction);
     });
 });
+
+if (playerVolumeSlider) {
+    setVolumeSlider(getStoredVolume());
+
+    playerVolumeSlider.addEventListener('input', () => {
+        sendPlayerVolume((Number.parseFloat(playerVolumeSlider.value) || 0) / 100);
+    });
+
+    playerVolumeSlider.addEventListener('change', () => {
+        sendPlayerVolume((Number.parseFloat(playerVolumeSlider.value) || 0) / 100, true);
+    });
+}
 
 if (nowPlayingProgress) {
     const updateProgressPreview = (clientX) => {
@@ -942,7 +1177,7 @@ if (nowPlayingProgress) {
     nowPlayingProgress.addEventListener('change', () => {
         const position = Number.parseFloat(nowPlayingProgress.value) || 0;
         isScrubbingProgress = false;
-        sendMprisControl('seek', { position: String(position) });
+        sendPlayerControl('seek', { position: String(position) });
     });
 }
 
@@ -999,7 +1234,7 @@ lyricsLines?.addEventListener('click', (event) => {
         return;
     }
 
-    sendMprisControl('seek', { position: String(position) });
+    sendPlayerControl('seek', { position: String(position) });
     syncLyricsToPosition(position);
 });
 
@@ -1013,9 +1248,77 @@ window.addEventListener('resize', () => {
     updateStatusPillWidth();
 });
 
+const stopMprisPolling = () => {
+    clearInterval(mprisPollTimer);
+    mprisPollTimer = null;
+    pendingForcedMprisRefresh = false;
+    mprisFetchRun += 1;
+};
+
+const startMprisPolling = ({ force = false } = {}) => {
+    fetchMprisSong({ force });
+
+    if (mprisPollTimer) {
+        return;
+    }
+
+    mprisPollTimer = setInterval(fetchMprisSong, MPRIS_POLL_INTERVAL);
+};
+
+const showBrowserPlayerIdle = () => {
+    const state = window.spinachPlayer?.getState?.();
+    if (state?.title || state?.artist || state?.album) {
+        setPlayerSong(state);
+        return;
+    }
+
+    if (!showSavedLastSong('last played')) {
+        setPlaybackState('stopped');
+        nowPlayingTimer.textContent = 'navidrome player';
+        updateStatusPillWidth();
+        setProgressSlider(null, null);
+        setNowPlayingText('nothing playing', 'empty');
+    }
+};
+
+const refreshPlayerSource = () => {
+    const previousSource = playerSource;
+    playerSource = getPlayerSource();
+    forceNextPlayerRender = true;
+    lastTrackId = '';
+    lastCoverUrl = '';
+
+    if (previousSource !== playerSource) {
+        resetLyricsState('tap the card to fetch lyrics');
+    }
+
+    if (isMprisSource()) {
+        startMprisPolling({ force: previousSource !== playerSource });
+        return;
+    }
+
+    stopMprisPolling();
+    sendPlayerVolume(getStoredVolume(), true);
+    showBrowserPlayerIdle();
+};
+
+window.addEventListener('spinach:player-state', (event) => {
+    if (!isMprisSource()) {
+        setPlayerSong(event.detail || {});
+    }
+});
+
+window.addEventListener('spinach:player-message', (event) => {
+    if (!isMprisSource() && event.detail?.message) {
+        nowPlayingTimer.textContent = event.detail.message;
+        updateStatusPillWidth();
+    }
+});
+
+window.addEventListener('spinach:player-source-change', refreshPlayerSource);
+
 setCoverThemeToggle();
 updateStatusPillWidth();
 setPlaybackState(playbackState);
-fetchMprisSong();
-setInterval(fetchMprisSong, MPRIS_POLL_INTERVAL);
+refreshPlayerSource();
 })();
