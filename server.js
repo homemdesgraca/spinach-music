@@ -1,13 +1,15 @@
 const http = require('http');
 const https = require('https');
 const { execFile } = require('child_process');
-const { readFile } = require('fs/promises');
+const { mkdir, readFile, writeFile } = require('fs/promises');
 const { createReadStream } = require('fs');
+const { createHash } = require('crypto');
 const { extname, join, normalize } = require('path');
 const { fileURLToPath } = require('url');
 
 const PORT = 5500;
 const ROOT = __dirname;
+const COVER_CACHE_DIR = join(ROOT, '.cache', 'covers');
 
 const mimeTypes = {
     '.html': 'text/html; charset=utf-8',
@@ -29,7 +31,7 @@ const runPlayerctl = (args) => new Promise((resolve) => {
 });
 
 const runCurlJson = (url) => new Promise((resolve, reject) => {
-    execFile('curl', ['-fsSL', '--max-time', '8', url], { timeout: 9000, maxBuffer: 1024 * 1024 }, (error, stdout) => {
+    execFile('curl', ['-fsSL', '--max-time', '8', url], { timeout: 9000, maxBuffer: 12 * 1024 * 1024 }, (error, stdout) => {
         if (error) {
             reject(error);
             return;
@@ -235,6 +237,113 @@ const structuredEntryToLyrics = (entry) => {
     };
 };
 
+const asList = (value) => Array.isArray(value) ? value : value ? [value] : [];
+
+const normalizeLibraryItem = (item, mode, index) => {
+    const title = firstLine(item?.name || item?.title || item?.album || 'untitled');
+    const artist = firstLine(item?.artist || item?.albumArtist || '');
+    const tracks = Number(item?.songCount ?? item?.trackCount ?? item?.childCount ?? item?.albumCount ?? 0);
+    const coverArt = firstLine(item?.coverArt || '');
+    const imageUrl = firstLine(item?.artistImageUrl || item?.imageUrl || '');
+
+    return {
+        id: firstLine(item?.id || `${mode}-${index}`),
+        title,
+        subtitle: mode === 'albums' ? artist : '',
+        tracks: Number.isFinite(tracks) ? tracks : 0,
+        coverArt,
+        imageUrl,
+        type: mode === 'albums' ? 'album' : 'artist',
+    };
+};
+
+const getNavidromeLibraryItems = async (connection, mode) => {
+    if (mode === 'artists') {
+        const payload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getArtists').toString());
+        const indexes = asList(payload?.['subsonic-response']?.artists?.index);
+        return indexes
+            .flatMap((index) => asList(index?.artist))
+            .map((artist, index) => normalizeLibraryItem(artist, mode, index))
+            .filter((artist) => artist.title)
+            .sort((a, b) => a.title.localeCompare(b.title));
+    }
+
+    const payload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getAlbumList2', {
+        type: 'alphabeticalByName',
+        size: 500,
+        offset: 0,
+    }).toString());
+    return asList(payload?.['subsonic-response']?.albumList2?.album)
+        .map((album, index) => normalizeLibraryItem(album, mode, index))
+        .filter((album) => album.title)
+        .sort((a, b) => a.title.localeCompare(b.title));
+};
+
+const sendNavidromeLibrary = async (request, response) => {
+    const searchParams = new URL(request.url, `http://${request.headers.host}`).searchParams;
+    const connection = getNavidromeConnection(searchParams);
+    const mode = firstLine(searchParams.get('mode')) === 'albums' ? 'albums' : 'artists';
+
+    if (!connection.url || !connection.username || !connection.password) {
+        sendJson(response, 400, { error: 'missing navidrome connection' });
+        return;
+    }
+
+    try {
+        const items = await getNavidromeLibraryItems(connection, mode);
+        sendJson(response, 200, { mode, items });
+    } catch (error) {
+        sendJson(response, 502, { error: error?.message || 'failed to fetch navidrome library' });
+    }
+};
+
+const sendNavidromeCover = async (request, response) => {
+    const searchParams = new URL(request.url, `http://${request.headers.host}`).searchParams;
+    const connection = getNavidromeConnection(searchParams);
+    const id = firstLine(searchParams.get('id'));
+    const coverArt = firstLine(searchParams.get('coverArt'));
+    const imageUrl = firstLine(searchParams.get('imageUrl'));
+    const type = firstLine(searchParams.get('type'));
+
+    if (!connection.url || !connection.username || !connection.password) {
+        sendJson(response, 400, { error: 'missing navidrome connection' });
+        return;
+    }
+
+    const cachePrefix = `${normalizeServerUrl(connection.url).origin}|${connection.username}|${type}`;
+
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        await sendCachedRemoteArt(imageUrl, response, `${cachePrefix}|image|${imageUrl}`);
+        return;
+    }
+
+    if (coverArt) {
+        await sendCachedRemoteArt(buildNavidromeUrl(connection, 'getCoverArt', {
+            id: coverArt,
+            size: 512,
+        }).toString(), response, `${cachePrefix}|coverArt|${coverArt}`);
+        return;
+    }
+
+    if (type === 'artist' && id) {
+        try {
+            const payload = await fetchRemoteJson(buildNavidromeUrl(connection, 'getArtistInfo2', {
+                id,
+                count: 0,
+            }).toString());
+            const info = payload?.['subsonic-response']?.artistInfo2 || {};
+            const remoteImage = firstLine(info.largeImageUrl || info.mediumImageUrl || info.smallImageUrl || '');
+
+            if (remoteImage) {
+                await sendCachedRemoteArt(remoteImage, response, `${cachePrefix}|artist|${id}|${remoteImage}`);
+                return;
+            }
+        } catch {}
+    }
+
+    sendJson(response, 404, { error: 'cover not found' });
+};
+
 const resolveNavidromeSongId = async (connection, title, artist, album) => {
     const searchTerms = [title, artist, album].filter(Boolean).join(' ');
     const artistVariants = [...new Set([artist, getPrimaryArtist(artist)])].filter(Boolean);
@@ -409,7 +518,7 @@ const sendRemoteArt = (artUrl, response) => {
 
     client.get(artUrl, (remoteResponse) => {
         if (remoteResponse.statusCode >= 300 && remoteResponse.statusCode < 400 && remoteResponse.headers.location) {
-            sendRemoteArt(remoteResponse.headers.location, response);
+            sendRemoteArt(new URL(remoteResponse.headers.location, artUrl).toString(), response);
             return;
         }
 
@@ -420,6 +529,78 @@ const sendRemoteArt = (artUrl, response) => {
     }).on('error', () => {
         sendJson(response, 404, { error: 'art not found' });
     });
+};
+
+const fetchRemoteBinary = (remoteUrl, redirects = 4) => new Promise((resolve, reject) => {
+    const client = remoteUrl.startsWith('https:') ? https : http;
+
+    client.get(remoteUrl, (remoteResponse) => {
+        if (remoteResponse.statusCode >= 300 && remoteResponse.statusCode < 400 && remoteResponse.headers.location && redirects > 0) {
+            resolve(fetchRemoteBinary(new URL(remoteResponse.headers.location, remoteUrl).toString(), redirects - 1));
+            return;
+        }
+
+        if ((remoteResponse.statusCode || 500) >= 400) {
+            reject(new Error('remote art not found'));
+            remoteResponse.resume();
+            return;
+        }
+
+        const chunks = [];
+        let total = 0;
+
+        remoteResponse.on('data', (chunk) => {
+            total += chunk.length;
+            if (total > 12 * 1024 * 1024) {
+                remoteResponse.destroy(new Error('remote art too large'));
+                return;
+            }
+            chunks.push(chunk);
+        });
+        remoteResponse.on('end', () => {
+            resolve({
+                buffer: Buffer.concat(chunks),
+                contentType: remoteResponse.headers['content-type'] || 'image/jpeg',
+            });
+        });
+    }).on('error', reject);
+});
+
+const sendCachedRemoteArt = async (artUrl, response, cacheKey) => {
+    const hash = createHash('sha256').update(cacheKey || artUrl).digest('hex');
+    const imagePath = join(COVER_CACHE_DIR, `${hash}.bin`);
+    const metaPath = join(COVER_CACHE_DIR, `${hash}.json`);
+
+    try {
+        const meta = JSON.parse(await readFile(metaPath, 'utf8'));
+        response.writeHead(200, {
+            'content-type': meta.contentType || 'image/jpeg',
+            'cache-control': 'public, max-age=31536000, immutable',
+        });
+        createReadStream(imagePath).pipe(response);
+        return;
+    } catch {}
+
+    try {
+        const { buffer, contentType } = await fetchRemoteBinary(artUrl);
+        if (!String(contentType).startsWith('image/')) {
+            throw new Error('remote art is not an image');
+        }
+
+        await mkdir(COVER_CACHE_DIR, { recursive: true });
+        await Promise.all([
+            writeFile(imagePath, buffer),
+            writeFile(metaPath, JSON.stringify({ contentType, cachedAt: new Date().toISOString() })),
+        ]);
+
+        response.writeHead(200, {
+            'content-type': contentType,
+            'cache-control': 'public, max-age=31536000, immutable',
+        });
+        response.end(buffer);
+    } catch {
+        sendJson(response, 404, { error: 'art not found' });
+    }
 };
 
 const sendMprisArt = async (response) => {
@@ -527,6 +708,16 @@ const server = http.createServer(async (request, response) => {
 
     if (pathname === '/navidrome/lyrics') {
         await sendNavidromeLyrics(request, response);
+        return;
+    }
+
+    if (pathname === '/navidrome/library') {
+        await sendNavidromeLibrary(request, response);
+        return;
+    }
+
+    if (pathname === '/navidrome/cover') {
+        await sendNavidromeCover(request, response);
         return;
     }
 

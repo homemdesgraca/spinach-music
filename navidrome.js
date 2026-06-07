@@ -113,12 +113,17 @@ const fillConnectionForm = (connection) => {
     navidromePass.value = connection.password || '';
 };
 
+const notifyConnectionChange = () => {
+    window.dispatchEvent(new CustomEvent('spinach:navidrome-connection-change'));
+};
+
 const disconnectNavidrome = () => {
     localStorage.removeItem(STORAGE_KEY);
     isNavidromeConnected = false;
     setConnectButtonMood();
     setNavidromeButtonText(false);
     setStatus('disconnected');
+    notifyConnectionChange();
 };
 
 const connectNavidrome = async () => {
@@ -151,6 +156,7 @@ const connectNavidrome = async () => {
         setNavidromeButtonText(true);
         setStatus('', 'ok');
         setConnectButtonMood('connected');
+        notifyConnectionChange();
     } catch (error) {
         isNavidromeConnected = false;
         setNavidromeButtonText(false);
