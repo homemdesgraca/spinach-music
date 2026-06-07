@@ -30,7 +30,9 @@ const deckCards = {
 
 let activeLibraryTab;
 let subtitleExitAnimation;
+let subtitleAnimationRun = 0;
 let tabsMoveAnimation;
+let nowPlayingMoveAnimation;
 let deckAnimationFrame;
 let deckCurrentOffset = 0;
 let deckTargetOffset = 0;
@@ -40,15 +42,22 @@ let deckBuffer = 0;
 let deckMode = '';
 let deckSlotCards = [];
 
-const flipElementToState = (element, applyState) => {
+const flipElementToState = (element, applyState, options = {}) => {
     if (!element) {
         applyState();
         return;
     }
 
+    const {
+        duration = 1750,
+        easing = 'cubic-bezier(0.16, 1, 0.3, 1)',
+    } = options;
+    element.classList.add('is-layout-controlled');
     const first = element.getBoundingClientRect();
-    element.getAnimations().forEach((animation) => animation.cancel());
+
+    nowPlayingMoveAnimation?.cancel();
     element.style.transition = 'none';
+    element.style.transform = '';
 
     applyState();
 
@@ -56,10 +65,26 @@ const flipElementToState = (element, applyState) => {
     const deltaX = first.left - last.left;
     const deltaY = first.top - last.top;
 
-    element.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-    document.body.offsetWidth;
     element.style.transition = '';
-    element.style.transform = '';
+
+    if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) {
+        element.style.transform = '';
+        return;
+    }
+
+    nowPlayingMoveAnimation = element.animate([
+        { transform: `translate(${deltaX}px, ${deltaY}px)` },
+        { transform: 'translate(0, 0)' },
+    ], {
+        duration,
+        easing,
+        fill: 'both',
+    });
+
+    nowPlayingMoveAnimation.onfinish = () => {
+        element.style.transform = '';
+        nowPlayingMoveAnimation = null;
+    };
 };
 
 const getCurrentTranslate = (element) => {
@@ -113,22 +138,23 @@ const animateTabsToCenter = (selectedTab) => {
 };
 
 const animateSubtitleOut = () => {
-    if (!subtitleText || subtitleText.classList.contains('is-leaving')) {
+    if (!subtitleText) {
         return;
     }
 
-    subtitleExitAnimation?.cancel();
-    subtitleText.getAnimations().forEach((animation) => animation.cancel());
-
+    const run = ++subtitleAnimationRun;
     const computed = getComputedStyle(subtitleText);
+    const startOpacity = computed.opacity;
     const startTransform = computed.transform === 'none' ? 'translateX(0)' : computed.transform;
 
-    subtitleText.classList.add('is-leaving');
-    subtitleText.style.opacity = computed.opacity;
+    subtitleExitAnimation?.cancel();
+    subtitleText.getAnimations().forEach((animation) => animation.cancel());
+    subtitleText.classList.add('is-leaving', 'is-layout-controlled');
+    subtitleText.style.opacity = startOpacity;
     subtitleText.style.transform = startTransform;
 
     subtitleExitAnimation = subtitleText.animate([
-        { opacity: computed.opacity, transform: startTransform, offset: 0 },
+        { opacity: startOpacity, transform: startTransform, offset: 0 },
         { opacity: 0.82, transform: 'translateX(-32vw)', offset: 0.25 },
         { opacity: 0.5, transform: 'translateX(-65vw)', offset: 0.5 },
         { opacity: 0.18, transform: 'translateX(-98vw)', offset: 0.75 },
@@ -140,8 +166,48 @@ const animateSubtitleOut = () => {
     });
 
     subtitleExitAnimation.onfinish = () => {
+        if (run !== subtitleAnimationRun) {
+            return;
+        }
+
         subtitleText.style.opacity = '0';
         subtitleText.style.transform = 'translateX(-130vw)';
+    };
+};
+
+const animateSubtitleIn = () => {
+    if (!subtitleText) {
+        return;
+    }
+
+    const run = ++subtitleAnimationRun;
+    const computed = getComputedStyle(subtitleText);
+    const startOpacity = computed.opacity;
+    const startTransform = computed.transform === 'none' ? 'translateX(-130vw)' : computed.transform;
+
+    subtitleExitAnimation?.cancel();
+    subtitleText.getAnimations().forEach((animation) => animation.cancel());
+    subtitleText.classList.add('is-leaving', 'is-layout-controlled');
+    subtitleText.style.opacity = startOpacity;
+    subtitleText.style.transform = startTransform;
+
+    subtitleExitAnimation = subtitleText.animate([
+        { opacity: startOpacity, transform: startTransform },
+        { opacity: 1, transform: 'translateX(0)' },
+    ], {
+        duration: 1250,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        fill: 'forwards',
+    });
+
+    subtitleExitAnimation.onfinish = () => {
+        if (run !== subtitleAnimationRun) {
+            return;
+        }
+
+        subtitleText.style.opacity = '1';
+        subtitleText.style.transform = 'translateX(0)';
+        subtitleText.classList.remove('is-leaving');
     };
 };
 
@@ -264,7 +330,53 @@ const queueDeckScroll = (delta) => {
     }
 };
 
+const animateTabsHome = () => {
+    const current = getCurrentTranslate(libraryTabs);
+
+    tabsMoveAnimation?.cancel();
+    libraryTabs.getAnimations().forEach((animation) => animation.cancel());
+    libraryTabs.style.setProperty('--library-tabs-shift', '0px');
+    libraryTabs.style.transform = `translate(${current.x}px, ${current.y}px)`;
+
+    tabsMoveAnimation = libraryTabs.animate([
+        { transform: `translate(${current.x}px, ${current.y}px)` },
+        { transform: 'translate(0, 0)' },
+    ], {
+        duration: 950,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        fill: 'forwards',
+    });
+
+    tabsMoveAnimation.onfinish = () => {
+        libraryTabs.style.transform = '';
+    };
+};
+
+const closeLibraryMode = () => {
+    activeLibraryTab = null;
+    animateSubtitleIn();
+
+    flipElementToState(nowPlayingBar, () => {
+        document.body.classList.remove('library-mode');
+        libraryTabs.classList.remove('is-focused');
+        delete libraryTabs.dataset.activeTab;
+        libraryDeck?.setAttribute('aria-hidden', 'true');
+
+        libraryTabButtons.forEach((tab) => {
+            tab.classList.remove('is-selected', 'is-counterpart');
+            tab.setAttribute('aria-selected', 'false');
+        });
+    });
+
+    animateTabsHome();
+};
+
 const openLibraryTab = (selectedTab) => {
+    if (activeLibraryTab === selectedTab && document.body.classList.contains('library-mode')) {
+        closeLibraryMode();
+        return;
+    }
+
     activeLibraryTab = selectedTab;
     animateSubtitleOut();
     renderLibraryDeck(selectedTab.dataset.libraryTab);

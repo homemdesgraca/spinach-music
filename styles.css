@@ -165,7 +165,8 @@ body.library-mode .top-section .subtitle-txt:not(.is-leaving) {
     animation-name: none;
 }
 
-.top-section .subtitle-txt.is-leaving {
+.top-section .subtitle-txt.is-leaving,
+.top-section .subtitle-txt.is-layout-controlled {
     animation-name: none;
 }
 
@@ -498,9 +499,38 @@ body.library-mode .library-deck {
 
 .lyrics-lines {
     max-height: min(24rem, 56vh);
-    padding: 0.25rem 0.35rem 0.6rem 0;
+    padding: 0.25rem 0.45rem 0.6rem 0;
     overflow: hidden auto;
+    scrollbar-color: var(--color-text) var(--color-input-bg);
     scrollbar-width: thin;
+}
+
+.lyrics-lines::-webkit-scrollbar {
+    width: 0.78rem;
+}
+
+.lyrics-lines::-webkit-scrollbar-track {
+    border: 1px solid var(--color-text);
+    border-radius: 999px;
+    background: var(--color-input-bg);
+}
+
+.lyrics-lines::-webkit-scrollbar-thumb {
+    min-height: 2.4rem;
+    border: 2px solid var(--color-text);
+    border-radius: 0.38rem;
+    background:
+        repeating-linear-gradient(135deg, rgba(11, 93, 30, 0.32) 0 0.08rem, transparent 0.08rem 0.18rem),
+        repeating-linear-gradient(45deg, transparent 0 0.22rem, rgba(216, 243, 220, 0.75) 0.22rem 0.3rem),
+        var(--color-surface);
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+.lyrics-lines::-webkit-scrollbar-thumb:hover {
+    background:
+        repeating-linear-gradient(135deg, rgba(11, 93, 30, 0.42) 0 0.08rem, transparent 0.08rem 0.18rem),
+        repeating-linear-gradient(45deg, transparent 0 0.22rem, rgba(216, 243, 220, 0.88) 0.22rem 0.3rem),
+        var(--color-surface-hover);
 }
 
 .lyrics-line {
@@ -563,6 +593,10 @@ body.library-mode .now-playing-bar {
     top: clamp(9.15rem, 13vw, 11rem);
     bottom: auto;
     z-index: 5;
+    animation-name: none;
+}
+
+.now-playing-bar.is-layout-controlled {
     animation-name: none;
 }
 
