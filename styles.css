@@ -90,6 +90,7 @@ body::after {
 .connections-panel,
 .connection-card input,
 .connection-connect,
+.library-tab,
 .lyrics-tab,
 .lyrics-card,
 .lyrics-close,
@@ -115,8 +116,7 @@ body::after {
 }
 
 .top-section .title-txt,
-.top-section .subtitle-txt,
-.library-stats {
+.top-section .subtitle-txt {
     color: var(--color-text);
     margin-left: 3%;
     font-family: var(--font-main);
@@ -154,51 +154,76 @@ body::after {
         2px 2px 0 var(--color-shadow),
         0 0 0.45rem var(--color-surface),
         0.07em 0.07em 0 rgba(0, 35, 10, 0.2);
+    transition: color 0.85s cubic-bezier(0.16, 1, 0.3, 1), text-shadow 0.85s cubic-bezier(0.16, 1, 0.3, 1), opacity 3.65s cubic-bezier(0.16, 1, 0.3, 1), transform 4.2s cubic-bezier(0.16, 1, 0.3, 1);
     animation-duration: 0.6s;
     animation-delay: 0.95s;
 }
 
-.library-stats {
+body.library-mode .top-section .subtitle-txt,
+.top-section .subtitle-txt.is-leaving {
+    opacity: 0;
+    transform: translateX(-130vw);
+    animation-name: none;
+}
+
+.library-tabs {
     position: fixed;
-    z-index: 11;
-    top: 1.48rem;
-    right: calc(3% + 3.4rem);
+    right: 3%;
+    bottom: 1.5rem;
+    z-index: 4;
     display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    margin: 0;
-    font-family: var(--font-secondary);
-    font-size: 0.9rem;
+    align-items: flex-end;
+    gap: 0.55rem;
+    pointer-events: auto;
+    transform: translateX(0);
+    transition: transform 0.82s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: slide-in-bottom 0.74s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.library-tabs.is-focused {
+    animation-name: none;
+}
+
+.library-tab {
+    min-width: 5.8rem;
+    min-height: 2.45rem;
+    padding: 0.45rem 0.85rem;
+    border: 2px solid var(--color-text);
+    border-radius: 0.9rem 0.9rem 0.25rem 0.25rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-size: 1.25rem;
     font-weight: 900;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 2px 3px 0 var(--color-shadow);
+    text-shadow: 1px 1px 0 var(--color-shadow);
+    overflow: hidden;
+    transition: background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.48s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1), filter 0.48s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.library-tab:hover {
+    background: var(--color-surface-hover);
+    transform: translateY(-0.18rem);
+    box-shadow: 2px 4px 0 var(--color-shadow);
+}
+
+.library-tab:active {
+    transform: translateY(0.08rem) scale(0.98);
+    box-shadow: 1px 1px 0 var(--color-shadow);
+}
+
+.library-tabs.is-focused .library-tab.is-selected {
+    transform: scale(1.04);
+}
+
+.library-tabs.is-focused .library-tab.is-counterpart {
     opacity: 0;
     pointer-events: none;
-    transform: translateX(0.65rem) scale(0.96);
-}
-
-.library-stats span {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.28rem;
-    min-height: 1.62rem;
-    padding: 0.36rem 0.72rem;
-    border: 2px solid var(--color-text);
-    border-radius: 999px;
-    background: var(--color-surface);
-    box-shadow: 1px 2px 0 var(--color-shadow);
-}
-
-.library-stats .stat-number {
-    font-family: var(--font-main);
-    font-size: 1.35rem;
-    font-weight: 900;
-    line-height: 0.85;
-    text-shadow: 1px 1px 0 var(--color-shadow);
-}
-
-.library-stats.open {
-    pointer-events: auto;
-    animation: stats-pop-in 0.65s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+    transform: scale(0.94);
+    filter: blur(0.08rem);
 }
 
 .lyrics-drawer {
@@ -378,8 +403,15 @@ body::after {
     justify-content: space-between;
     gap: 1rem;
     overflow: visible;
-    transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), max-width 0.35s cubic-bezier(0.16, 1, 0.3, 1), color 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), max-width 0.35s cubic-bezier(0.16, 1, 0.3, 1), color 0.85s cubic-bezier(0.16, 1, 0.3, 1), top 1.75s cubic-bezier(0.16, 1, 0.3, 1), bottom 1.75s cubic-bezier(0.16, 1, 0.3, 1), transform 1.75s cubic-bezier(0.16, 1, 0.3, 1);
     animation: slide-in-bottom 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+body.library-mode .now-playing-bar {
+    top: clamp(9.15rem, 13vw, 11rem);
+    bottom: auto;
+    z-index: 5;
+    animation-name: none;
 }
 
 .now-playing-bar::before {
@@ -789,18 +821,6 @@ body::after {
 @keyframes disc-spin {
     to {
         transform: rotate(360deg);
-    }
-}
-
-@keyframes stats-pop-in {
-    from {
-        opacity: 0;
-        transform: translateX(0.65rem) scale(0.96);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateX(0) scale(1);
     }
 }
 

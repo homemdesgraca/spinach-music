@@ -59,6 +59,7 @@ let activeLyricsIndex = -1;
 let isFetchingLyrics = false;
 let pendingLyricsRefresh = false;
 let lyricsFetchToken = 0;
+let lyricsAbortController;
 
 try {
     appliedCoverBackgroundUrl = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null')?.url || '';
@@ -131,10 +132,10 @@ const normalizeServerUrl = (rawUrl) => {
     return baseUrl;
 };
 
-const fetchNavidromeLyrics = async () => {
+const fetchNavidromeLyrics = async (songData, signal) => {
     const connection = loadNavidromeConnection();
 
-    if (!connection?.url || !connection?.username || !connection?.password || !currentSongData?.title) {
+    if (!connection?.url || !connection?.username || !connection?.password || !songData?.title) {
         throw new Error('no navidrome connection');
     }
 
@@ -142,12 +143,12 @@ const fetchNavidromeLyrics = async () => {
     url.searchParams.set('url', connection.url);
     url.searchParams.set('username', connection.username);
     url.searchParams.set('password', connection.password);
-    url.searchParams.set('title', currentSongData.title);
-    url.searchParams.set('artist', currentSongData.artist || '');
-    url.searchParams.set('album', currentSongData.album || '');
-    url.searchParams.set('duration', String(currentSongData.duration || ''));
+    url.searchParams.set('title', songData.title);
+    url.searchParams.set('artist', songData.artist || '');
+    url.searchParams.set('album', songData.album || '');
+    url.searchParams.set('duration', String(songData.duration || ''));
 
-    const response = await fetch(url.toString(), { cache: 'no-store' });
+    const response = await fetch(url.toString(), { cache: 'no-store', signal });
     const payload = await response.json();
 
     if (!response.ok) {
@@ -157,14 +158,14 @@ const fetchNavidromeLyrics = async () => {
     return payload;
 };
 
-const fetchLrclibLyrics = async () => {
+const fetchLrclibLyrics = async (songData, signal) => {
     const url = new URL(LYRICS_URL, window.location.origin);
-    url.searchParams.set('title', currentSongData.title);
-    url.searchParams.set('artist', currentSongData.artist);
-    url.searchParams.set('album', currentSongData.album || '');
-    url.searchParams.set('duration', String(currentSongData.duration || ''));
+    url.searchParams.set('title', songData.title);
+    url.searchParams.set('artist', songData.artist);
+    url.searchParams.set('album', songData.album || '');
+    url.searchParams.set('duration', String(songData.duration || ''));
 
-    const response = await fetch(url.toString(), { cache: 'no-store' });
+    const response = await fetch(url.toString(), { cache: 'no-store', signal });
     if (!response.ok) {
         throw new Error('lyrics not found');
     }
@@ -231,23 +232,26 @@ const syncLyricsToPosition = (position) => {
 };
 
 const fetchLyrics = async (force = false) => {
-    if (!currentSongData?.title || !currentSongData?.artist) {
+    const songData = currentSongData ? { ...currentSongData } : null;
+
+    if (!songData?.title || !songData?.artist) {
         setLyricsStatus('no song info yet');
         return;
     }
 
     if (isFetchingLyrics) {
-        pendingLyricsRefresh = true;
-        return;
+        lyricsAbortController?.abort();
+        pendingLyricsRefresh = false;
     }
 
-    const lyricsKey = formatLyricsKey(currentSongData);
+    const lyricsKey = formatLyricsKey(songData);
     if (!force && lyricsKey === lastLyricsKey && lyricsEntries.length) {
-        syncLyricsToPosition(currentSongData.position);
+        syncLyricsToPosition(songData.position);
         return;
     }
 
     const fetchToken = ++lyricsFetchToken;
+    lyricsAbortController = new AbortController();
 
     try {
         isFetchingLyrics = true;
@@ -256,7 +260,12 @@ const fetchLyrics = async (force = false) => {
         activeLyricsIndex = -1;
         renderLyrics([]);
 
-        const navidromeLyrics = await fetchNavidromeLyrics().catch(() => null);
+        const navidromeLyrics = await fetchNavidromeLyrics(songData, lyricsAbortController.signal).catch((error) => {
+            if (error?.name === 'AbortError') {
+                throw error;
+            }
+            return null;
+        });
         if (fetchToken !== lyricsFetchToken) {
             return;
         }
@@ -267,7 +276,7 @@ const fetchLyrics = async (force = false) => {
             renderLyrics(lyricsEntries, navidromeLyrics.plainLyrics || '');
             lastLyricsKey = lyricsKey;
             setLyricsStatus('synced from navidrome');
-            syncLyricsToPosition(currentSongData.position);
+            syncLyricsToPosition(songData.position);
             return;
         }
 
@@ -276,7 +285,12 @@ const fetchLyrics = async (force = false) => {
             setLyricsStatus('plain lyrics from navidrome, checking synced lyrics...');
         }
 
-        const lrclibLyrics = await fetchLrclibLyrics().catch(() => null);
+        const lrclibLyrics = await fetchLrclibLyrics(songData, lyricsAbortController.signal).catch((error) => {
+            if (error?.name === 'AbortError') {
+                throw error;
+            }
+            return null;
+        });
         if (fetchToken !== lyricsFetchToken) {
             return;
         }
@@ -287,7 +301,7 @@ const fetchLyrics = async (force = false) => {
             renderLyrics(lyricsEntries, lrclibLyrics.plainLyrics || '');
             lastLyricsKey = lyricsKey;
             setLyricsStatus('synced from lrclib');
-            syncLyricsToPosition(currentSongData.position);
+            syncLyricsToPosition(songData.position);
             return;
         }
 
@@ -304,8 +318,12 @@ const fetchLyrics = async (force = false) => {
         }
 
         lastLyricsKey = lyricsKey;
-        setLyricsStatus('lyrics not found');
-    } catch {
+        setLyricsStatus('plain lyrics from navidrome');
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            return;
+        }
+
         if (fetchToken === lyricsFetchToken) {
             lastLyricsKey = lyricsKey;
             renderLyrics([]);
@@ -754,12 +772,15 @@ const setMprisSong = (data) => {
     setProgressSlider(data.position, data.duration);
 
     if (!hasSong || state === 'stopped') {
+        lyricsAbortController?.abort();
         currentSongData = null;
         lastTrackId = '';
         lastCoverUrl = '';
         lastLyricsKey = '';
         lyricsEntries = [];
         activeLyricsIndex = -1;
+        isFetchingLyrics = false;
+        pendingLyricsRefresh = false;
         renderLyrics([]);
         setLyricsStatus('tap the card to fetch lyrics');
         setProgressSlider(null, null);

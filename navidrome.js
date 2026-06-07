@@ -3,9 +3,6 @@ const navidromeUser = document.querySelector('#navidrome-user');
 const navidromePass = document.querySelector('#navidrome-pass');
 const navidromeConnect = document.querySelector('#navidrome-connect');
 const navidromeStatus = document.querySelector('#navidrome-status');
-const libraryStats = document.querySelector('#library-stats');
-const artistCount = document.querySelector('#artist-count');
-const albumCount = document.querySelector('#album-count');
 
 const STORAGE_KEY = 'spinachMusic.navidromeConnection';
 const DEFAULT_NAVIDROME_URL = 'http://127.0.0.1:4533/';
@@ -15,10 +12,6 @@ const CLIENT_NAME = 'spinach-music';
 const setStatus = (message, type = '') => {
     navidromeStatus.textContent = message;
     navidromeStatus.className = `connection-status navidrome-status ${type}`.trim();
-};
-
-const setStatText = (element, count, label) => {
-    element.innerHTML = `<strong class="stat-number">${count}</strong> ${label}`;
 };
 
 const getErrorMessage = (error) => {
@@ -120,67 +113,12 @@ const fillConnectionForm = (connection) => {
     navidromePass.value = connection.password || '';
 };
 
-const asArray = (value) => {
-    if (!value) {
-        return [];
-    }
-
-    return Array.isArray(value) ? value : [value];
-};
-
-const getArtistTotal = async (connection) => {
-    const subsonic = await fetchSubsonic(connection.url, 'getArtists', connection);
-    const indexes = asArray(subsonic.artists?.index);
-
-    return indexes.reduce((total, index) => total + asArray(index.artist).length, 0);
-};
-
-const getAlbumTotal = async (connection) => {
-    const pageSize = 500;
-    let offset = 0;
-    let total = 0;
-
-    while (true) {
-        const subsonic = await fetchSubsonic(connection.url, 'getAlbumList2', connection, {
-            type: 'alphabeticalByName',
-            size: pageSize,
-            offset,
-        });
-        const albums = asArray(subsonic.albumList2?.album);
-
-        total += albums.length;
-
-        if (albums.length < pageSize) {
-            return total;
-        }
-
-        offset += pageSize;
-    }
-};
-
-const updateLibraryStats = async (connection) => {
-    artistCount.textContent = 'loading artists...';
-    albumCount.textContent = 'loading albums...';
-    libraryStats.classList.add('open');
-
-    const [artists, albums] = await Promise.all([
-        getArtistTotal(connection),
-        getAlbumTotal(connection),
-    ]);
-
-    setStatText(artistCount, artists, 'artists');
-    setStatText(albumCount, albums, 'albums');
-};
-
 const disconnectNavidrome = () => {
     localStorage.removeItem(STORAGE_KEY);
     isNavidromeConnected = false;
     setConnectButtonMood();
     setNavidromeButtonText(false);
     setStatus('disconnected');
-    libraryStats.classList.remove('open');
-    setStatText(artistCount, 0, 'artists');
-    setStatText(albumCount, 0, 'albums');
 };
 
 const connectNavidrome = async () => {
@@ -213,7 +151,6 @@ const connectNavidrome = async () => {
         setNavidromeButtonText(true);
         setStatus('', 'ok');
         setConnectButtonMood('connected');
-        await updateLibraryStats(connection);
     } catch (error) {
         isNavidromeConnected = false;
         setNavidromeButtonText(false);
@@ -230,9 +167,6 @@ if (savedConnection?.url && savedConnection?.username && savedConnection?.passwo
     setNavidromeButtonText(true);
     setStatus('', 'ok');
     setConnectButtonMood('connected');
-    updateLibraryStats(savedConnection).catch((error) => {
-        setStatus(getErrorMessage(error), 'error');
-    });
 }
 
 navidromeConnect.addEventListener('click', connectNavidrome);
