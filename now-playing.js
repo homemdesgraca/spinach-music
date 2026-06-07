@@ -17,6 +17,7 @@ const coverThemeToggle = document.querySelector('#cover-theme-toggle');
 const lyricsDrawer = document.querySelector('.lyrics-drawer');
 const lyricsTab = document.querySelector('.lyrics-tab');
 const lyricsClose = document.querySelector('.lyrics-close');
+const lyricsCard = document.querySelector('.lyrics-card');
 const lyricsStatus = document.querySelector('#lyrics-status');
 const lyricsLines = document.querySelector('#lyrics-lines');
 
@@ -60,6 +61,8 @@ let isFetchingLyrics = false;
 let pendingLyricsRefresh = false;
 let lyricsFetchToken = 0;
 let lyricsAbortController;
+let lyricsResizeAnimation;
+let lyricsRenderTimer;
 
 try {
     appliedCoverBackgroundUrl = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null')?.url || '';
@@ -182,11 +185,9 @@ const setLyricsStatus = (message) => {
     }
 };
 
-const renderLyrics = (entries, plainLyrics = '') => {
-    if (!lyricsLines) {
-        return;
-    }
+const isLyricsDrawerOpen = () => lyricsDrawer?.classList.contains('open');
 
+const fillLyricsLines = (entries, plainLyrics = '') => {
     lyricsLines.innerHTML = '';
 
     if (entries.length) {
@@ -208,6 +209,56 @@ const renderLyrics = (entries, plainLyrics = '') => {
         line.textContent = text.trim();
         lyricsLines.append(line);
     });
+};
+
+const getLyricsCardTargetHeight = () => {
+    const maxHeight = Number.parseFloat(getComputedStyle(lyricsCard).maxHeight) || Infinity;
+    return Math.min(lyricsCard.scrollHeight, maxHeight);
+};
+
+const renderLyrics = (entries, plainLyrics = '', options = {}) => {
+    if (!lyricsLines) {
+        return;
+    }
+
+    if (!lyricsCard || !isLyricsDrawerOpen()) {
+        fillLyricsLines(entries, plainLyrics);
+        return;
+    }
+
+    window.clearTimeout(lyricsRenderTimer);
+
+    lyricsRenderTimer = window.setTimeout(() => {
+        if (!isLyricsDrawerOpen()) {
+            fillLyricsLines(entries, plainLyrics);
+            lyricsCard.style.height = '';
+            return;
+        }
+
+        lyricsResizeAnimation?.cancel();
+
+        const startHeight = lyricsCard.getBoundingClientRect().height;
+        lyricsCard.style.height = `${startHeight}px`;
+        fillLyricsLines(entries, plainLyrics);
+
+        const targetHeight = getLyricsCardTargetHeight();
+        const isShrinking = targetHeight < startHeight - 2;
+        const duration = isShrinking ? 1150 : 680;
+
+        lyricsResizeAnimation = lyricsCard.animate([
+            { height: `${startHeight}px` },
+            { height: `${targetHeight}px` },
+        ], {
+            duration,
+            easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+            fill: 'both',
+        });
+
+        lyricsResizeAnimation.onfinish = () => {
+            lyricsCard.style.height = '';
+            lyricsResizeAnimation = null;
+        };
+    }, options.delayShrink ? 420 : 0);
 };
 
 const syncLyricsToPosition = (position) => {
@@ -258,7 +309,9 @@ const fetchLyrics = async (force = false) => {
         setLyricsStatus('fetching synced lyrics...');
         lyricsEntries = [];
         activeLyricsIndex = -1;
-        renderLyrics([]);
+        if (!isLyricsDrawerOpen()) {
+            renderLyrics([]);
+        }
 
         const navidromeLyrics = await fetchNavidromeLyrics(songData, lyricsAbortController.signal).catch((error) => {
             if (error?.name === 'AbortError') {
@@ -273,7 +326,7 @@ const fetchLyrics = async (force = false) => {
         const navidromeSynced = parseSyncedLyrics(navidromeLyrics?.syncedLyrics || '');
         if (navidromeSynced.length) {
             lyricsEntries = navidromeSynced;
-            renderLyrics(lyricsEntries, navidromeLyrics.plainLyrics || '');
+            renderLyrics(lyricsEntries, navidromeLyrics.plainLyrics || '', { delayShrink: true });
             lastLyricsKey = lyricsKey;
             setLyricsStatus('synced from navidrome');
             syncLyricsToPosition(songData.position);
@@ -281,7 +334,7 @@ const fetchLyrics = async (force = false) => {
         }
 
         if (navidromeLyrics?.plainLyrics) {
-            renderLyrics([], navidromeLyrics.plainLyrics || '');
+            renderLyrics([], navidromeLyrics.plainLyrics || '', { delayShrink: true });
             setLyricsStatus('plain lyrics from navidrome, checking synced lyrics...');
         }
 
@@ -298,7 +351,7 @@ const fetchLyrics = async (force = false) => {
         const lrclibSynced = parseSyncedLyrics(lrclibLyrics?.syncedLyrics || '');
         if (lrclibSynced.length) {
             lyricsEntries = lrclibSynced;
-            renderLyrics(lyricsEntries, lrclibLyrics.plainLyrics || '');
+            renderLyrics(lyricsEntries, lrclibLyrics.plainLyrics || '', { delayShrink: true });
             lastLyricsKey = lyricsKey;
             setLyricsStatus('synced from lrclib');
             syncLyricsToPosition(songData.position);
@@ -307,7 +360,7 @@ const fetchLyrics = async (force = false) => {
 
         if (lrclibLyrics) {
             lyricsEntries = [];
-            renderLyrics([], lrclibLyrics.plainLyrics || '');
+            renderLyrics([], lrclibLyrics.plainLyrics || '', { delayShrink: true });
             lastLyricsKey = lyricsKey;
             setLyricsStatus('plain lyrics from lrclib');
             return;
@@ -326,7 +379,7 @@ const fetchLyrics = async (force = false) => {
 
         if (fetchToken === lyricsFetchToken) {
             lastLyricsKey = lyricsKey;
-            renderLyrics([]);
+            renderLyrics([], '', { delayShrink: true });
             setLyricsStatus('lyrics not found');
         }
     } finally {
@@ -781,7 +834,7 @@ const setMprisSong = (data) => {
         activeLyricsIndex = -1;
         isFetchingLyrics = false;
         pendingLyricsRefresh = false;
-        renderLyrics([]);
+        renderLyrics([], '', { delayShrink: true });
         setLyricsStatus('tap the card to fetch lyrics');
         setProgressSlider(null, null);
         setNowPlayingText('nothing playing', 'empty');
