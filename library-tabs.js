@@ -9,6 +9,7 @@ const subtitleText = document.querySelector('.subtitle-txt');
 const nowPlayingBar = document.querySelector('.now-playing-bar');
 
 const NAVIDROME_STORAGE_KEY = 'spinachMusic.navidromeConnection';
+const TRACK_COVER_STORAGE_KEY = 'spinachMusic.fetchTrackCovers';
 const LIBRARY_ENDPOINT = '/navidrome/library';
 const TRACKS_ENDPOINT = '/navidrome/tracks';
 const COVER_ENDPOINT = '/navidrome/cover';
@@ -119,6 +120,8 @@ const loadNavidromeConnection = () => {
     }
 };
 
+const shouldFetchIndividualTrackCovers = () => localStorage.getItem(TRACK_COVER_STORAGE_KEY) === 'true';
+
 const hashText = (value) => String(value || '').split('').reduce((hash, char) => (
     ((hash << 5) - hash) + char.charCodeAt(0)
 ), 0);
@@ -216,7 +219,9 @@ const updateCoverProgress = () => {
 
     const noun = coverProgress.mode === 'artists'
         ? 'artist covers'
-        : coverProgress.mode === 'albumTracks' ? 'track covers' : 'album covers';
+        : coverProgress.mode === 'albumTracks'
+            ? (shouldFetchIndividualTrackCovers() ? 'track covers' : 'album cover')
+            : 'album covers';
     const percent = coverProgress.total ? Math.round((coverProgress.done / coverProgress.total) * 100) : 0;
 
     libraryProgressText.textContent = coverProgress.active
@@ -302,9 +307,18 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
     }
 
     const run = ++coverProgress.run;
+    const seenCoverKeys = new Set();
     const candidates = items
-        .filter((item) => item.id || item.coverArt || item.imageUrl)
-        .map((item) => ({ item, key: getCoverKey(item) }));
+        .filter((item) => item.coverCacheUrl || item.coverRequestUrl || item.coverUrl || item.coverArt || item.imageUrl || item.type === 'artist')
+        .map((item) => ({ item, key: item.coverKey || getCoverKey(item) }))
+        .filter(({ key }) => {
+            if (!key || seenCoverKeys.has(key)) {
+                return false;
+            }
+
+            seenCoverKeys.add(key);
+            return true;
+        });
 
     coverProgress.mode = mode;
     coverProgress.total = candidates.length;
@@ -348,6 +362,12 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
                     item.palette = payload.palette;
                 }
                 item.coverUrl = item.coverRequestUrl || '';
+                items.forEach((candidate) => {
+                    if ((candidate.coverKey || getCoverKey(candidate)) === key) {
+                        candidate.coverUrl = item.coverUrl;
+                        candidate.palette = item.palette || candidate.palette || null;
+                    }
+                });
                 applyCoverToCards(key, item.coverUrl, item.palette);
             } catch {
                 coverCache.set(key, '');
@@ -433,6 +453,13 @@ const fetchLibraryMode = async (mode, force = false, context = null) => {
             return;
         }
 
+        const useAlbumCoverForTracks = mode === 'albumTracks' && !shouldFetchIndividualTrackCovers();
+        const albumCoverSource = useAlbumCoverForTracks ? {
+            id: requestContext?.id || '',
+            coverArt: requestContext?.coverArt || '',
+            imageUrl: requestContext?.imageUrl || '',
+            type: 'album',
+        } : null;
         const payloadItems = mode === 'albumTracks'
             ? (payload.tracks || []).map((track, index) => ({
                 ...track,
@@ -443,19 +470,29 @@ const fetchLibraryMode = async (mode, force = false, context = null) => {
                 tracks: 1,
                 countLabel: `#${track.track || index + 1}`,
                 type: 'song',
+                coverArt: useAlbumCoverForTracks ? (albumCoverSource.coverArt || '') : track.coverArt,
+                imageUrl: useAlbumCoverForTracks ? (albumCoverSource.imageUrl || '') : track.imageUrl,
             }))
             : (payload.items || []);
 
         deckCards[mode] = payloadItems.map((item, index) => {
-            const coverKey = getCoverKey(item);
-            const coverRequestUrl = buildCoverUrl(item)?.toString() || '';
+            const coverSource = useAlbumCoverForTracks ? albumCoverSource : item;
+            const hasCoverPointer = Boolean(coverSource?.coverArt || coverSource?.imageUrl || coverSource?.type === 'artist');
+            const coverKey = getCoverKey(coverSource || item);
+            const cachedCover = coverCache.has(coverKey) ? (coverCache.get(coverKey) || '') : '';
+            const coverRequestUrl = useAlbumCoverForTracks
+                ? (requestContext?.coverRequestUrl || (hasCoverPointer ? buildCoverUrl(coverSource)?.toString() : '') || '')
+                : (buildCoverUrl(coverSource)?.toString() || '');
+            const coverCacheUrl = useAlbumCoverForTracks
+                ? (requestContext?.coverCacheUrl || (hasCoverPointer ? buildCoverUrl(coverSource, CACHE_COVER_ENDPOINT)?.toString() : '') || '')
+                : (buildCoverUrl(coverSource, CACHE_COVER_ENDPOINT)?.toString() || '');
             return {
                 ...item,
                 coverKey,
                 coverRequestUrl,
-                coverCacheUrl: buildCoverUrl(item, CACHE_COVER_ENDPOINT)?.toString() || '',
-                coverUrl: coverCache.has(coverKey) ? (coverCache.get(coverKey) || '') : coverRequestUrl,
-                palette: coverPaletteCache.get(coverKey) || null,
+                coverCacheUrl,
+                coverUrl: cachedCover || (useAlbumCoverForTracks ? requestContext?.coverUrl : '') || coverRequestUrl,
+                palette: coverPaletteCache.get(coverKey) || (useAlbumCoverForTracks ? requestContext?.palette : null) || null,
                 colors: getCardColors(item.title, index),
             };
         });
@@ -1318,6 +1355,13 @@ const openAlbumTracks = (album) => {
         id: album.id,
         title: album.title || 'album',
         artist: album.subtitle || album.artist || artistAlbumContext?.title || '',
+        coverArt: album.coverArt || '',
+        imageUrl: album.imageUrl || '',
+        coverKey: album.coverKey || getCoverKey(album),
+        coverRequestUrl: album.coverRequestUrl || '',
+        coverCacheUrl: album.coverCacheUrl || '',
+        coverUrl: album.coverUrl || '',
+        palette: album.palette || null,
         returnMode: deckMode === 'artistAlbums' ? 'artistAlbums' : 'albums',
         returnOffset: deckCurrentOffset,
         artistContext: artistAlbumContext ? { ...artistAlbumContext } : null,
@@ -1386,6 +1430,16 @@ libraryDeckTrack?.addEventListener('click', (event) => {
 });
 
 libraryBackButton?.addEventListener('click', backToPreviousLibraryView);
+
+window.addEventListener('spinach:advanced-settings-changed', (event) => {
+    if (event.detail?.setting !== 'trackCovers' || deckMode !== 'albumTracks' || !albumTracksContext?.id) {
+        return;
+    }
+
+    libraryLoadState.albumTracks = 'loading';
+    deckCards.albumTracks = [];
+    fetchLibraryMode('albumTracks', true, albumTracksContext);
+});
 
 libraryDeckTrack?.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') {

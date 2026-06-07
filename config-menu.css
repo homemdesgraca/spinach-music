@@ -80,8 +80,14 @@
     transition-delay: 0.29s;
 }
 
+.config-menu.open .config-card:nth-child(6) {
+    transform: translateY(10.8rem) rotate(-38deg) scale(1);
+    transition-delay: 0.37s;
+}
+
 .theme-panel,
-.sound-panel {
+.sound-panel,
+.advanced-panel {
     position: fixed;
     top: 6.5rem;
     right: 3%;
@@ -101,7 +107,8 @@
 }
 
 .theme-panel.open,
-.sound-panel.open {
+.sound-panel.open,
+.advanced-panel.open {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0) scale(1);
@@ -109,14 +116,18 @@
 
 .theme-panel h2,
 .sound-panel h2,
+.advanced-panel h2,
 .theme-card p,
 .sound-card p,
-.sound-note {
+.advanced-card p,
+.sound-note,
+.advanced-note {
     margin: 0;
 }
 
 .theme-panel h2,
-.sound-panel h2 {
+.sound-panel h2,
+.advanced-panel h2 {
     font-family: var(--font-main);
     font-size: 2rem;
     font-weight: 900;
@@ -125,7 +136,8 @@
 }
 
 .theme-close,
-.sound-close {
+.sound-close,
+.advanced-close {
     float: right;
     margin-top: 0.15rem;
     border: none;
@@ -139,18 +151,21 @@
 }
 
 .theme-close:hover,
-.sound-close:hover {
+.sound-close:hover,
+.advanced-close:hover {
     color: var(--color-shadow);
     transform: translateY(-1px);
 }
 
 .theme-close:active,
-.sound-close:active {
+.sound-close:active,
+.advanced-close:active {
     transform: translateY(1px) scale(0.97);
 }
 
 .theme-card,
-.sound-card {
+.sound-card,
+.advanced-card {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -169,7 +184,8 @@
 }
 
 .theme-toggle,
-.sound-toggle {
+.sound-toggle,
+.advanced-toggle {
     min-width: 3.4rem;
     padding: 0.28rem 0.5rem;
     border: 2px solid var(--color-text);
@@ -183,12 +199,14 @@
 }
 
 .theme-toggle.is-on,
-.sound-toggle.is-on {
+.sound-toggle.is-on,
+.advanced-toggle.is-on {
     background: var(--color-text);
     color: var(--color-input-bg);
 }
 
-.sound-note {
+.sound-note,
+.advanced-note {
     margin-top: 0.72rem;
     font-size: 0.72rem;
     font-weight: 700;
