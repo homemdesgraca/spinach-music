@@ -29,6 +29,7 @@ const LYRICS_URL = '/lyrics';
 const MPRIS_POLL_INTERVAL = 1000;
 const ADAPTIVE_COLORS_STORAGE_KEY = 'spinachMusic.adaptiveCoverColors';
 const COVER_BACKGROUND_STORAGE_KEY = 'spinachMusic.coverBackground';
+const HIGH_RES_BACKGROUND_STORAGE_KEY = 'spinachMusic.highResBackgroundCovers';
 const NAVIDROME_STORAGE_KEY = 'spinachMusic.navidromeConnection';
 const PLAYER_SOURCE_STORAGE_KEY = 'spinachMusic.playerSource';
 const VOLUME_STORAGE_KEY = 'spinachMusic.volume';
@@ -66,6 +67,7 @@ let currentDuration = 0;
 let currentCoverUrl = '';
 let appliedCoverBackgroundUrl = '';
 let appliedCoverBackgroundIdentity = '';
+let coverBackgroundRun = 0;
 let currentSongData = null;
 let lastLyricsKey = '';
 let lyricsEntries = [];
@@ -448,6 +450,10 @@ const getCoverBackgroundIdentity = (data = {}, coverUrl = '') => {
     return artist || title ? `track:${artist}:${title}` : `cover:${coverUrl}`;
 };
 
+const getCoverBackgroundSize = () => (
+    localStorage.getItem(HIGH_RES_BACKGROUND_STORAGE_KEY) === 'true' ? 1600 : 1024
+);
+
 const getStableCoverBackgroundUrl = (coverUrl) => {
     if (!coverUrl) {
         return '';
@@ -459,7 +465,7 @@ const getStableCoverBackgroundUrl = (coverUrl) => {
         if (url.pathname === '/navidrome/cover' && url.searchParams.get('coverArt')) {
             url.searchParams.delete('id');
             url.searchParams.delete('art');
-            url.searchParams.set('size', '1600');
+            url.searchParams.set('size', String(getCoverBackgroundSize()));
         }
 
         return url.pathname === '/mpris/art'
@@ -553,6 +559,7 @@ const resetCoverBackground = (disableBackground = false) => {
 
     document.body.classList.remove('has-cover-theme');
     root.classList.remove('has-cover-theme');
+    coverBackgroundRun += 1;
     appliedCoverBackgroundUrl = '';
     appliedCoverBackgroundIdentity = '';
     root.style.setProperty('--cover-bg-opacity', '0');
@@ -640,7 +647,7 @@ const applyAdaptiveCoverColors = () => {
     }
 };
 
-const crossfadeCoverBackground = (nextCoverUrl) => {
+const crossfadeCoverBackground = (nextCoverUrl, run = coverBackgroundRun) => {
     const previousCoverUrl = appliedCoverBackgroundUrl;
 
     if (previousCoverUrl === nextCoverUrl) {
@@ -650,6 +657,10 @@ const crossfadeCoverBackground = (nextCoverUrl) => {
     }
 
     const revealNextCover = () => {
+        if (run !== coverBackgroundRun || (currentCoverUrl && getStableCoverBackgroundUrl(currentCoverUrl) !== nextCoverUrl)) {
+            return;
+        }
+
         if (previousCoverUrl) {
             const outgoing = document.createElement('img');
             outgoing.className = 'cover-theme-crossfade';
@@ -683,7 +694,7 @@ const crossfadeCoverBackground = (nextCoverUrl) => {
     const preload = new Image();
     let revealed = false;
     const safeReveal = () => {
-        if (revealed) {
+        if (revealed || run !== coverBackgroundRun) {
             return;
         }
 
@@ -692,10 +703,42 @@ const crossfadeCoverBackground = (nextCoverUrl) => {
     };
 
     preload.onload = safeReveal;
-    preload.onerror = safeReveal;
+    preload.onerror = () => {
+        revealed = true;
+    };
     preload.src = nextCoverUrl;
     preload.decode?.().then(safeReveal).catch(() => {});
-    window.setTimeout(safeReveal, 900);
+};
+
+const startCoverBackgroundPreload = () => {
+    if (!coverBackgroundEnabled || !currentCoverUrl) {
+        return;
+    }
+
+    try {
+        const backgroundCoverUrl = getStableCoverBackgroundUrl(currentCoverUrl);
+        const backgroundIdentity = getCoverBackgroundIdentity(currentSongData, currentCoverUrl);
+        const isSameBackground = backgroundIdentity && backgroundIdentity === appliedCoverBackgroundIdentity;
+
+        if (!isSameBackground) {
+            const run = ++coverBackgroundRun;
+            crossfadeCoverBackground(backgroundCoverUrl, run);
+            appliedCoverBackgroundIdentity = backgroundIdentity;
+        } else {
+            root.style.setProperty('--cover-bg-opacity', '1');
+            root.style.setProperty('--cover-bg-scale', '1');
+        }
+
+        root.classList.add('has-cover-theme');
+        document.body.classList.add('has-cover-theme');
+
+        const cachedBackground = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null') || {};
+        localStorage.setItem(COVER_BACKGROUND_STORAGE_KEY, JSON.stringify({
+            ...cachedBackground,
+            url: isSameBackground ? appliedCoverBackgroundUrl || backgroundCoverUrl : backgroundCoverUrl,
+            identity: backgroundIdentity,
+        }));
+    } catch {}
 };
 
 const applyCoverBackground = () => {
@@ -717,7 +760,8 @@ const applyCoverBackground = () => {
         const isSameBackground = backgroundIdentity && backgroundIdentity === appliedCoverBackgroundIdentity;
 
         if (!isSameBackground) {
-            crossfadeCoverBackground(backgroundCoverUrl);
+            const run = ++coverBackgroundRun;
+            crossfadeCoverBackground(backgroundCoverUrl, run);
             appliedCoverBackgroundIdentity = backgroundIdentity;
         } else {
             root.style.setProperty('--cover-bg-opacity', '1');
@@ -728,7 +772,7 @@ const applyCoverBackground = () => {
         root.classList.add('has-cover-theme');
         document.body.classList.add('has-cover-theme');
         localStorage.setItem(COVER_BACKGROUND_STORAGE_KEY, JSON.stringify({
-            url: isSameBackground ? appliedCoverBackgroundUrl || backgroundCoverUrl : backgroundCoverUrl,
+            url: isSameBackground && appliedCoverBackgroundUrl === backgroundCoverUrl ? appliedCoverBackgroundUrl : backgroundCoverUrl,
             identity: backgroundIdentity,
             overlay,
             pageBg: colorToRgb(average),
@@ -927,6 +971,7 @@ const setNowPlayingText = (title, state = 'empty', coverUrl = '', meta = {}) => 
     coverThemeButton?.toggleAttribute('disabled', !coverUrl);
 
     if (coverUrl && coverBackgroundEnabled) {
+        startCoverBackgroundPreload();
         requestAnimationFrame(applyCoverBackground);
     } else if (!coverUrl) {
         resetCoverBackground();
@@ -1233,6 +1278,24 @@ nowPlayingCover.addEventListener('load', () => {
         applyCoverBackground();
     }
 });
+
+nowPlayingCover.addEventListener('error', () => {
+    if (currentCoverUrl && coverBackgroundEnabled) {
+        startCoverBackgroundPreload();
+    }
+    resetCoverColors();
+});
+
+window.addEventListener('spinach:advanced-settings-changed', (event) => {
+    if (event.detail?.setting !== 'backgroundCovers' || !currentCoverUrl || !coverBackgroundEnabled) {
+        return;
+    }
+
+    appliedCoverBackgroundIdentity = '';
+    startCoverBackgroundPreload();
+    applyCoverBackground();
+});
+
 window.addEventListener('resize', () => {
     queueNowPlayingMarquees();
     updateStatusPillWidth();

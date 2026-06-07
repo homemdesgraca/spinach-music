@@ -14,7 +14,9 @@ const themeClose = document.querySelector('.theme-close');
 const soundClose = document.querySelector('.sound-close');
 const advancedClose = document.querySelector('.advanced-close');
 const trackCoverToggle = document.querySelector('#track-cover-toggle');
+const backgroundCoverToggle = document.querySelector('#background-cover-toggle');
 const ADVANCED_TRACK_COVER_STORAGE_KEY = 'spinachMusic.fetchTrackCovers';
+const ADVANCED_BACKGROUND_COVER_STORAGE_KEY = 'spinachMusic.highResBackgroundCovers';
 
 const closeConfigMenu = () => {
     configMenu.classList.remove('open');
@@ -86,22 +88,32 @@ configCards.forEach((card) => {
     card.addEventListener('click', closeConfigMenu);
 });
 
-const setTrackCoverToggle = (enabled) => {
-    trackCoverToggle?.classList.toggle('is-on', enabled);
-    trackCoverToggle?.setAttribute('aria-pressed', String(enabled));
-    if (trackCoverToggle) {
-        trackCoverToggle.textContent = enabled ? 'on' : 'off';
+const setAdvancedToggle = (toggle, enabled) => {
+    toggle?.classList.toggle('is-on', enabled);
+    toggle?.setAttribute('aria-pressed', String(enabled));
+    if (toggle) {
+        toggle.textContent = enabled ? 'on' : 'off';
     }
 };
 
-setTrackCoverToggle(localStorage.getItem(ADVANCED_TRACK_COVER_STORAGE_KEY) === 'true');
+setAdvancedToggle(trackCoverToggle, localStorage.getItem(ADVANCED_TRACK_COVER_STORAGE_KEY) === 'true');
+setAdvancedToggle(backgroundCoverToggle, localStorage.getItem(ADVANCED_BACKGROUND_COVER_STORAGE_KEY) === 'true');
 
 trackCoverToggle?.addEventListener('click', () => {
     const enabled = trackCoverToggle.getAttribute('aria-pressed') !== 'true';
     localStorage.setItem(ADVANCED_TRACK_COVER_STORAGE_KEY, String(enabled));
-    setTrackCoverToggle(enabled);
+    setAdvancedToggle(trackCoverToggle, enabled);
     window.dispatchEvent(new CustomEvent('spinach:advanced-settings-changed', {
         detail: { setting: 'trackCovers', enabled },
+    }));
+});
+
+backgroundCoverToggle?.addEventListener('click', () => {
+    const enabled = backgroundCoverToggle.getAttribute('aria-pressed') !== 'true';
+    localStorage.setItem(ADVANCED_BACKGROUND_COVER_STORAGE_KEY, String(enabled));
+    setAdvancedToggle(backgroundCoverToggle, enabled);
+    window.dispatchEvent(new CustomEvent('spinach:advanced-settings-changed', {
+        detail: { setting: 'backgroundCovers', enabled },
     }));
 });
 

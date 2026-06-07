@@ -1268,7 +1268,7 @@ body.library-mode .now-playing-bar {
         linear-gradient(124deg, transparent 0 42%, rgba(11, 93, 30, 0.32) 44% 47%, transparent 49% 100%) 31% 27% / 0.52rem 0.1rem no-repeat,
         conic-gradient(from 18deg, rgba(255, 255, 255, 0.2), transparent 18deg 238deg, rgba(216, 243, 220, 0.18) 275deg, transparent 318deg),
         repeating-radial-gradient(circle, transparent 0 0.16rem, var(--color-disc-line) 0.175rem 0.19rem, transparent 0.21rem 0.31rem),
-        radial-gradient(circle, transparent 0 0.46rem, var(--color-text) 0.48rem 0.52rem, transparent 0.54rem 0.78rem, var(--color-disc-line) 0.79rem 0.815rem, transparent 0.84rem 100%);
+        radial-gradient(circle, transparent 0 0.72rem, var(--color-disc-line) 0.79rem 0.815rem, transparent 0.84rem 100%);
     opacity: 0.94;
     animation: disc-spin 0.85s linear infinite;
     animation-play-state: paused;
@@ -1280,15 +1280,17 @@ body.library-mode .now-playing-bar {
     z-index: 1;
     top: 50%;
     left: 50%;
-    width: 0.64rem;
-    height: 0.64rem;
+    box-sizing: border-box;
+    width: 18px;
+    height: 18px;
+    margin: -9px 0 0 -9px;
     border: 2px solid var(--color-text);
     border-radius: 50%;
     background:
-        radial-gradient(circle, var(--color-shadow) 0 0.11rem, transparent 0.13rem),
-        radial-gradient(circle at 38% 34%, rgba(216, 243, 220, 0.78), var(--color-surface-hover) 52%, var(--color-input-bg));
-    box-shadow: 0 0 0 0.12rem rgba(216, 243, 220, 0.18);
-    transform: translate(-50%, -50%);
+        radial-gradient(circle at center, var(--color-shadow) 0 3px, transparent 3.5px 5px),
+        radial-gradient(circle at center, var(--color-surface-hover) 0 7px, var(--color-input-bg) 7.5px 100%);
+    box-shadow: 0 0 0 2px rgba(216, 243, 220, 0.18);
+    transform: none;
 }
 
 .now-playing-bar.is-playing:not(.is-paused) .now-playing-disc::before {

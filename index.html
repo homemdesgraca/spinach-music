@@ -54,7 +54,7 @@
                 } catch {}
             })();
         </script>
-        <link rel="stylesheet" href="styles.css?v=24">
+        <link rel="stylesheet" href="styles.css?v=27">
         <link rel="stylesheet" href="config-menu.css?v=3">
         <link rel="stylesheet" href="connections-panel.css">
 
@@ -105,7 +105,12 @@
                 <p>individual track covers</p>
                 <button class="advanced-toggle" id="track-cover-toggle" type="button" aria-pressed="false">off</button>
             </div>
-            <p class="advanced-note">off reuses the album cover in track decks. on fetches per-track art.</p>
+            <div class="advanced-card">
+                <p>high-res backgrounds</p>
+                <button class="advanced-toggle" id="background-cover-toggle" type="button" aria-pressed="false">off</button>
+            </div>
+            <p class="advanced-note">track covers off reuses the album cover in track decks.</p>
+            <p class="advanced-note">backgrounds use 1024px by default. high-res uses 1600px.</p>
         </section>
 
         <section class="connections-panel" aria-hidden="true">
@@ -196,12 +201,12 @@
             </section>
         </section>
 
-        <script src="menu.js?v=4"></script>
+        <script src="menu.js?v=5"></script>
         <script src="sound.js?v=1"></script>
         <script src="navidrome.js?v=11"></script>
         <script src="player.js?v=4"></script>
         <script src="library-tabs.js?v=50"></script>
-        <script src="now-playing.js?v=57"></script>
+        <script src="now-playing.js?v=60"></script>
     </body>
 
 </html>
