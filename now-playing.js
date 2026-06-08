@@ -1149,8 +1149,28 @@ const setPlayerSong = (data) => {
         saveLastSong(data);
     }
 
-    if (!hasSong || state === 'stopped') {
-        if (showSavedLastSong(isMprisSource() && !hasSong ? 'mpris stopped' : 'last played')) {
+    const nextTrackId = data.trackId || [data.title, data.artist, data.album, data.duration].join('|');
+    const coverIdentity = formatCoverIdentity(data, nextTrackId);
+    const coverSeparator = data.coverUrl?.includes('?') ? '&' : '?';
+    const coverUrl = data.coverUrl ? `${data.coverUrl}${coverSeparator}art=${encodeURIComponent(coverIdentity)}` : '';
+
+    if (hasSong && state === 'stopped') {
+        if ((shouldForceRender || nextTrackId !== lastTrackId || coverUrl !== lastCoverUrl) && coverUrl) {
+            setNowPlayingText(
+                data.title || 'unknown song',
+                'playing',
+                coverUrl,
+                formatSongMeta(data.album, data.artist),
+            );
+            lastTrackId = nextTrackId;
+            lastCoverUrl = coverUrl;
+        }
+        syncLyricsToPosition(data.position || data.duration || 0);
+        return;
+    }
+
+    if (!hasSong) {
+        if (showSavedLastSong(isMprisSource() ? 'mpris stopped' : 'last played')) {
             return;
         }
 
@@ -1163,11 +1183,6 @@ const setPlayerSong = (data) => {
         setNowPlayingText('nothing playing', 'empty');
         return;
     }
-
-    const nextTrackId = data.trackId || [data.title, data.artist, data.album, data.duration].join('|');
-    const coverIdentity = formatCoverIdentity(data, nextTrackId);
-    const coverSeparator = data.coverUrl?.includes('?') ? '&' : '?';
-    const coverUrl = data.coverUrl ? `${data.coverUrl}${coverSeparator}art=${encodeURIComponent(coverIdentity)}` : '';
 
     if (shouldForceRender || nextTrackId !== lastTrackId || coverUrl !== lastCoverUrl) {
         setNowPlayingText(
