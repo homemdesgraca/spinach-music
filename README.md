@@ -1,7 +1,6 @@
 # spinach music
 
-spinach music is a simple web music ui with a _**Green Vibe**_  and 
-this is a wip.
+spinach music is a simple web music ui with a _**Green Vibe**_  and very wip.
 
 everything here is still rough. this is the first good-enough prototype, not even close to the finished app.
 
