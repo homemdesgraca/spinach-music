@@ -51,12 +51,3 @@ export const setPlayerSource = (source) => {
     return normalized;
 };
 
-export const loadNavidromeConnection = () => getStorageJson(STORAGE_KEYS.NAVIDROME_CONNECTION, null);
-
-export const saveNavidromeConnection = (connection) => {
-    setStorageJson(STORAGE_KEYS.NAVIDROME_CONNECTION, connection);
-};
-
-export const hasCompleteNavidromeConnection = (connection = loadNavidromeConnection()) => Boolean(
-    connection?.url && connection?.username && connection?.password
-);

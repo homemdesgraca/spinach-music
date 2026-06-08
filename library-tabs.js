@@ -1,6 +1,10 @@
 import { ENDPOINTS, EVENT_NAMES, STORAGE_KEYS } from './js/core/constants.js';
 import { listenSpinachEvent } from './js/core/events.js';
-import { getStorageBoolean, loadNavidromeConnection } from './js/core/storage.js';
+import { getStorageBoolean } from './js/core/storage.js';
+import {
+    buildNavidromeCoverUrl,
+    buildNavidromeLibraryUrl,
+} from './js/services/navidrome-client.js';
 
 const libraryTabs = document.querySelector('.library-tabs');
 const libraryTabButtons = document.querySelectorAll('.library-tab');
@@ -13,9 +17,6 @@ const subtitleText = document.querySelector('.subtitle-txt');
 const nowPlayingBar = document.querySelector('.now-playing-bar');
 
 const TRACK_COVER_STORAGE_KEY = STORAGE_KEYS.FETCH_TRACK_COVERS;
-const LIBRARY_ENDPOINT = ENDPOINTS.NAVIDROME_LIBRARY;
-const TRACKS_ENDPOINT = ENDPOINTS.NAVIDROME_TRACKS;
-const COVER_ENDPOINT = ENDPOINTS.NAVIDROME_COVER;
 const CACHE_COVER_ENDPOINT = ENDPOINTS.NAVIDROME_CACHE_COVER;
 const CARD_COLORS = [
     ['#d8f3dc', '#40916c'],
@@ -212,56 +213,11 @@ const getStatusCard = (mode) => {
 
 const getDeckCards = (mode) => deckCards[mode]?.length ? deckCards[mode] : [getStatusCard(mode)];
 
-const buildLibraryUrl = (mode, context = null) => {
-    const connection = loadNavidromeConnection();
-
-    if (!connection?.url || !connection?.username || !connection?.password) {
-        return null;
-    }
-
-    if ((mode === 'artistAlbums' || mode === 'albumTracks') && !context?.id) {
-        return null;
-    }
-
-    const url = new URL(mode === 'albumTracks' ? TRACKS_ENDPOINT : LIBRARY_ENDPOINT, window.location.origin);
-    if (mode !== 'albumTracks') {
-        url.searchParams.set('mode', mode);
-    }
-    url.searchParams.set('url', connection.url);
-    url.searchParams.set('username', connection.username);
-    url.searchParams.set('password', connection.password);
-    if (mode === 'artistAlbums') {
-        url.searchParams.set('artistId', context.id);
-        url.searchParams.set('artistTitle', context.title || '');
-    }
-
-    if (mode === 'albumTracks') {
-        url.searchParams.set('id', context.id);
-        url.searchParams.set('type', 'album');
-        url.searchParams.set('title', context.title || '');
-    }
-    return url;
-};
+const buildLibraryUrl = buildNavidromeLibraryUrl;
 
 const getCoverKey = (item) => `${item.type || 'item'}:${item.id || ''}:${item.coverArt || ''}:${item.imageUrl || ''}`;
 
-const buildCoverUrl = (item, endpoint = COVER_ENDPOINT) => {
-    const connection = loadNavidromeConnection();
-
-    if (!connection?.url || !connection?.username || !connection?.password || (!item?.id && !item?.coverArt && !item?.imageUrl)) {
-        return null;
-    }
-
-    const url = new URL(endpoint, window.location.origin);
-    url.searchParams.set('url', connection.url);
-    url.searchParams.set('username', connection.username);
-    url.searchParams.set('password', connection.password);
-    url.searchParams.set('id', item.id || '');
-    url.searchParams.set('coverArt', item.coverArt || '');
-    url.searchParams.set('imageUrl', item.imageUrl || '');
-    url.searchParams.set('type', item.type || '');
-    return url;
-};
+const buildCoverUrl = buildNavidromeCoverUrl;
 
 const preloadNowPlayingBackground = (item, fallback = {}) => {
     if (!item) {

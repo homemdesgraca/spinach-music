@@ -5,12 +5,12 @@ import {
     getStorageBoolean,
     getStorageJson,
     getStorageValue,
-    loadNavidromeConnection,
     removeStorageValue,
     setStorageBoolean,
     setStorageJson,
     setStorageValue,
 } from './js/core/storage.js';
+import { buildNavidromeLyricsUrl } from './js/services/navidrome-client.js';
 
 (() => {
 const nowPlayingBar = document.querySelector('.now-playing-bar');
@@ -149,20 +149,11 @@ const parseSyncedLyrics = (lyrics = '') => lyrics
     .filter((entry) => entry && entry.text);
 
 const fetchNavidromeLyrics = async (songData, signal) => {
-    const connection = loadNavidromeConnection();
+    const url = buildNavidromeLyricsUrl(songData);
 
-    if (!connection?.url || !connection?.username || !connection?.password || !songData?.title) {
+    if (!url) {
         throw new Error('no navidrome connection');
     }
-
-    const url = new URL(ENDPOINTS.NAVIDROME_LYRICS, window.location.origin);
-    url.searchParams.set('url', connection.url);
-    url.searchParams.set('username', connection.username);
-    url.searchParams.set('password', connection.password);
-    url.searchParams.set('title', songData.title);
-    url.searchParams.set('artist', songData.artist || '');
-    url.searchParams.set('album', songData.album || '');
-    url.searchParams.set('duration', String(songData.duration || ''));
 
     const response = await fetch(url.toString(), { cache: 'no-store', signal });
     const payload = await response.json();

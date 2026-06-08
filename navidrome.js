@@ -1,12 +1,17 @@
-import { DEFAULTS, EVENT_NAMES, STORAGE_KEYS, SUBSONIC_CLIENT } from './js/core/constants.js';
+import { DEFAULTS, EVENT_NAMES, STORAGE_KEYS } from './js/core/constants.js';
 import { emitSpinachEvent } from './js/core/events.js';
 import {
     getStorageBoolean,
-    loadNavidromeConnection,
     removeStorageValue,
-    saveNavidromeConnection,
     setStorageBoolean,
 } from './js/core/storage.js';
+import {
+    hasCompleteNavidromeConnection,
+    loadNavidromeConnection,
+    removeNavidromeConnection,
+    saveNavidromeConnection,
+    validateNavidromeConnection,
+} from './js/services/navidrome-client.js';
 
 const navidromeUrl = document.querySelector('#navidrome-url');
 const navidromeUser = document.querySelector('#navidrome-user');
@@ -21,11 +26,8 @@ const onboardingConnect = document.querySelector('#onboarding-navidrome-connect'
 const onboardingStatus = document.querySelector('#onboarding-navidrome-status');
 const onboardingSkip = document.querySelector('.onboarding-skip');
 
-const STORAGE_KEY = STORAGE_KEYS.NAVIDROME_CONNECTION;
 const ONBOARDING_SKIPPED_KEY = STORAGE_KEYS.ONBOARDING_SKIPPED;
 const DEFAULT_NAVIDROME_URL = DEFAULTS.NAVIDROME_URL;
-const SUBSONIC_VERSION = SUBSONIC_CLIENT.VERSION;
-const CLIENT_NAME = SUBSONIC_CLIENT.NAME;
 
 const setStatusText = (statusElement, message, type = '') => {
     if (!statusElement) {
@@ -92,47 +94,6 @@ const setAllConnectButtonMoods = (mood = '') => {
     setConnectButtonMood(mood, onboardingConnect);
 };
 
-const normalizeServerUrl = (rawUrl) => {
-    const normalized = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
-        ? rawUrl
-        : `https://${rawUrl}`;
-
-    const baseUrl = new URL(normalized);
-    if (!baseUrl.pathname.endsWith('/')) {
-        baseUrl.pathname += '/';
-    }
-
-    return baseUrl;
-};
-
-const buildRestUrl = (rawUrl, endpoint, credentials, params = {}) => {
-    const restUrl = new URL(`rest/${endpoint}.view`, normalizeServerUrl(rawUrl));
-
-    restUrl.searchParams.set('u', credentials.username);
-    restUrl.searchParams.set('p', credentials.password);
-    restUrl.searchParams.set('v', SUBSONIC_VERSION);
-    restUrl.searchParams.set('c', CLIENT_NAME);
-    restUrl.searchParams.set('f', 'json');
-
-    Object.entries(params).forEach(([key, value]) => {
-        restUrl.searchParams.set(key, value);
-    });
-
-    return restUrl;
-};
-
-const fetchSubsonic = async (url, endpoint, credentials, params) => {
-    const response = await fetch(buildRestUrl(url, endpoint, credentials, params).toString());
-    const data = await response.json();
-    const subsonic = data?.['subsonic-response'];
-
-    if (!response.ok || subsonic?.status !== 'ok') {
-        throw new Error(subsonic?.error?.message || 'failed to fetch');
-    }
-
-    return subsonic;
-};
-
 const saveConnection = saveNavidromeConnection;
 
 const loadConnection = loadNavidromeConnection;
@@ -163,7 +124,7 @@ const notifyConnectionChange = () => {
     });
 };
 
-const hasCompleteConnection = (connection) => Boolean(connection?.url && connection?.username && connection?.password);
+const hasCompleteConnection = hasCompleteNavidromeConnection;
 
 const setOnboardingActive = (active) => {
     document.documentElement.classList.toggle('onboarding-active', active);
@@ -195,7 +156,7 @@ const readConnectionForm = (source = 'panel') => {
 };
 
 const disconnectNavidrome = () => {
-    removeStorageValue(STORAGE_KEY);
+    removeNavidromeConnection();
     removeStorageValue(ONBOARDING_SKIPPED_KEY);
     isNavidromeConnected = false;
     fillConnectionForm(null);
@@ -229,7 +190,7 @@ const connectNavidrome = async (source = 'panel') => {
     try {
         activeButton.textContent = 'testing...';
         activeStatus('testing connection...');
-        await fetchSubsonic(connection.url, 'ping', connection);
+        await validateNavidromeConnection(connection);
         saveConnection(connection);
         removeStorageValue(ONBOARDING_SKIPPED_KEY);
         fillConnectionForm(connection);

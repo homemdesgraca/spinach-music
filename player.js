@@ -1,23 +1,23 @@
-import { DEFAULTS, ENDPOINTS, EVENT_NAMES, PLAYER_SOURCES, STORAGE_KEYS } from './js/core/constants.js';
+import { DEFAULTS, EVENT_NAMES, PLAYER_SOURCES, STORAGE_KEYS } from './js/core/constants.js';
 import { emitSpinachEvent, listenSpinachEvent } from './js/core/events.js';
 import {
     getPlayerSource,
     getStorageJson,
     getStorageValue,
-    hasCompleteNavidromeConnection,
-    loadNavidromeConnection,
     setPlayerSource,
     setStorageJson,
     setStorageValue,
 } from './js/core/storage.js';
+import {
+    buildNavidromePlayerCoverUrl,
+    buildNavidromeStreamUrl,
+    buildNavidromeTracksUrl,
+    hasCompleteNavidromeConnection,
+} from './js/services/navidrome-client.js';
 
 (() => {
 const VOLUME_STORAGE_KEY = STORAGE_KEYS.VOLUME;
 const PLAYER_STATE_STORAGE_KEY = STORAGE_KEYS.NAVIDROME_PLAYER_STATE;
-const TRACKS_ENDPOINT = ENDPOINTS.NAVIDROME_TRACKS;
-const STREAM_ENDPOINT = ENDPOINTS.NAVIDROME_STREAM;
-const COVER_ENDPOINT = ENDPOINTS.NAVIDROME_COVER;
-
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const loadStoredVolume = () => {
     const stored = Number.parseFloat(getStorageValue(VOLUME_STORAGE_KEY));
@@ -75,43 +75,8 @@ const restorePlayerState = () => {
     setMediaSession();
 };
 
-const withConnectionParams = (url, connection = loadNavidromeConnection()) => {
-    if (!hasConnection(connection)) {
-        return null;
-    }
-
-    url.searchParams.set('url', connection.url);
-    url.searchParams.set('username', connection.username);
-    url.searchParams.set('password', connection.password);
-    return url;
-};
-
-const buildStreamUrl = (track) => {
-    const url = withConnectionParams(new URL(STREAM_ENDPOINT, window.location.origin));
-    if (!url || !track?.id) {
-        return '';
-    }
-
-    url.searchParams.set('id', track.id);
-    return url.toString();
-};
-
-const buildCoverUrl = (track) => {
-    if (!track?.coverArt) {
-        return '';
-    }
-
-    const url = withConnectionParams(new URL(COVER_ENDPOINT, window.location.origin));
-    if (!url) {
-        return '';
-    }
-
-    url.searchParams.set('id', track.id || track.coverArt);
-    url.searchParams.set('coverArt', track.coverArt);
-    url.searchParams.set('type', 'song');
-    url.searchParams.set('size', '768');
-    return url.toString();
-};
+const buildStreamUrl = buildNavidromeStreamUrl;
+const buildCoverUrl = buildNavidromePlayerCoverUrl;
 
 const getStatus = () => {
     if (!currentTrack) {
@@ -246,17 +211,7 @@ const playQueue = async (tracks = [], startIndex = 0) => {
     await playTrackAt(Math.max(0, Math.min(startIndex, queue.length - 1)));
 };
 
-const buildTracksUrl = (item) => {
-    const url = withConnectionParams(new URL(TRACKS_ENDPOINT, window.location.origin));
-    if (!url || !item?.id) {
-        return null;
-    }
-
-    url.searchParams.set('id', item.id);
-    url.searchParams.set('type', item.type === 'artist' ? 'artist' : 'album');
-    url.searchParams.set('title', item.title || '');
-    return url;
-};
+const buildTracksUrl = buildNavidromeTracksUrl;
 
 const playLibraryItem = async (item) => {
     if (!hasConnection()) {

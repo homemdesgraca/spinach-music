@@ -5,11 +5,12 @@
         <title>Spinach Music</title>
         <script type="module">
             import { STORAGE_KEYS } from './js/core/constants.js';
-            import { getStorageBoolean, getStorageJson, hasCompleteNavidromeConnection } from './js/core/storage.js';
+            import { getStorageBoolean, getStorageJson } from './js/core/storage.js';
+            import { hasCompleteNavidromeConnection, loadNavidromeConnection } from './js/services/navidrome-client.js';
 
             (() => {
                 try {
-                    const connection = getStorageJson(STORAGE_KEYS.NAVIDROME_CONNECTION, null);
+                    const connection = loadNavidromeConnection();
                     const skippedOnboarding = getStorageBoolean(STORAGE_KEYS.ONBOARDING_SKIPPED);
 
                     if (!hasCompleteNavidromeConnection(connection) && !skippedOnboarding) {
