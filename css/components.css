@@ -1,0 +1,197 @@
+/* shared spinach ui primitives. feature files keep layout-specific rules. */
+
+.config-btn,
+.config-card,
+.theme-panel,
+.theme-card,
+.theme-toggle,
+.connections-panel,
+.connection-card input,
+.connection-connect,
+.library-tab,
+.lyrics-tab,
+.lyrics-card,
+.lyrics-close,
+.now-playing-bar,
+.now-playing-status-pill,
+.player-controls,
+.player-control,
+.progress-pill,
+.cover-theme-button,
+.now-playing-disc {
+    transition-property: background, background-color, color, border-color, box-shadow, text-shadow, opacity, transform, filter;
+    transition-duration: 0.75s;
+    transition-timing-function: var(--ease-soft);
+}
+
+.config-btn,
+.config-card,
+.library-back,
+.library-tab,
+.onboarding-skip {
+    border: 2px solid var(--color-text);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: var(--shadow-button);
+}
+
+.config-btn:hover,
+.config-card:hover,
+.library-back:hover,
+.library-tab:hover,
+.onboarding-skip:hover {
+    background: var(--color-surface-hover);
+    box-shadow: var(--shadow-button-hover);
+}
+
+.config-btn:active,
+.config-card:active,
+.library-back:active,
+.library-tab:active,
+.onboarding-skip:active {
+    box-shadow: var(--shadow-button-pressed);
+}
+
+.theme-panel,
+.sound-panel,
+.advanced-panel,
+.connections-panel {
+    z-index: 20;
+    padding: 1rem;
+    border: 2px solid var(--color-text);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    color: var(--color-text);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.theme-panel.open,
+.sound-panel.open,
+.advanced-panel.open,
+.connections-panel.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+.theme-card,
+.sound-card,
+.advanced-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    margin-top: 1rem;
+    padding: 0.65rem;
+    border: 2px solid var(--color-text);
+    border-radius: var(--radius-card);
+    background: var(--color-input-bg);
+    color: var(--color-on-input);
+}
+
+.theme-close,
+.sound-close,
+.advanced-close,
+.panel-close {
+    float: right;
+    margin-top: 0.15rem;
+    border: none;
+    background: none;
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-weight: 900;
+    text-decoration: underline;
+    cursor: pointer;
+    transition: transform var(--motion-fast), color var(--motion-fast);
+}
+
+.theme-close:hover,
+.sound-close:hover,
+.advanced-close:hover,
+.panel-close:hover {
+    color: var(--color-shadow);
+    transform: translateY(-1px);
+}
+
+.theme-close:active,
+.sound-close:active,
+.advanced-close:active,
+.panel-close:active {
+    transform: translateY(1px) scale(0.97);
+}
+
+.theme-toggle,
+.sound-toggle,
+.advanced-toggle {
+    min-width: 3.4rem;
+    padding: 0.28rem 0.5rem;
+    border: 2px solid var(--color-text);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+.theme-toggle.is-on,
+.sound-toggle.is-on,
+.advanced-toggle.is-on {
+    background: var(--color-text);
+    color: var(--color-input-bg);
+}
+
+.connection-card input,
+.connection-card button {
+    padding: 0.45rem 0.6rem;
+    border: 2px solid var(--color-text);
+    border-radius: 0.5rem;
+    background: var(--color-input-bg);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-weight: 700;
+}
+
+.connection-card button {
+    cursor: pointer;
+    box-shadow: var(--shadow-button);
+    transform: translateY(0);
+    transition: background var(--motion-medium), box-shadow var(--motion-medium), color var(--motion-medium), border-color var(--motion-medium), transform var(--motion-fast);
+}
+
+.connection-card button:hover {
+    background: var(--color-surface-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-button-hover);
+}
+
+.connection-card button:active {
+    transform: translateY(2px) scale(0.98);
+    box-shadow: var(--shadow-button-pressed);
+}
+
+.connection-status {
+    min-height: 1.2em;
+    margin: 0.25rem 0 0;
+    font-family: var(--font-secondary);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.connection-status:empty {
+    display: none;
+}
+
+.connection-status.ok {
+    color: var(--color-ok);
+}
+
+.connection-status.error {
+    color: var(--color-error);
+}
+

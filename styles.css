@@ -64,30 +64,6 @@ body::after {
     opacity: 0;
 }
 
-.config-btn,
-.config-card,
-.theme-panel,
-.theme-card,
-.theme-toggle,
-.connections-panel,
-.connection-card input,
-.connection-connect,
-.library-tab,
-.lyrics-tab,
-.lyrics-card,
-.lyrics-close,
-.now-playing-bar,
-.now-playing-status-pill,
-.player-controls,
-.player-control,
-.progress-pill,
-.cover-theme-button,
-.now-playing-disc {
-    transition-property: background, background-color, color, border-color, box-shadow, text-shadow, opacity, transform, filter;
-    transition-duration: 0.75s;
-    transition-timing-function: var(--ease-soft);
-}
-
 .top-section {
     position: fixed;
     top: 0;

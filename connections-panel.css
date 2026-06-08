@@ -1,27 +1,13 @@
 .connections-panel {
     position: absolute;
     top: 6.5rem;
-    z-index: 20;
     right: 3%;
     width: 19.5rem;
-    padding: 1rem;
-    border: 2px solid var(--color-text);
-    border-radius: 1rem;
-    background: var(--color-surface);
-    color: var(--color-text);
     font-family: var(--font-main);
     font-weight: 900;
     box-shadow: 2px 2px 0 var(--color-shadow);
-    opacity: 0;
-    pointer-events: none;
     transform: translateY(-0.7rem) scale(0.95);
     transition: opacity 0.25s ease-out, transform 0.35s var(--ease-soft), background 0.75s var(--ease-soft), color 0.75s var(--ease-soft), border-color 0.75s var(--ease-soft), box-shadow 0.75s var(--ease-soft);
-}
-
-.connections-panel.open {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0) scale(1);
 }
 
 .connections-panel h2 {
@@ -119,62 +105,11 @@
     gap: 0.15rem;
 }
 
-.panel-close {
-    float: right;
-    margin-top: 0.15rem;
-    border: none;
-    background: none;
-    color: var(--color-text);
-    font-family: var(--font-main);
-    font-weight: 900;
-    text-decoration: underline;
-    cursor: pointer;
-    transition: transform var(--motion-fast), color var(--motion-fast);
-}
-
-.panel-close:hover {
-    color: var(--color-shadow);
-    transform: translateY(-1px);
-}
-
-.panel-close:active {
-    transform: translateY(1px) scale(0.97);
-}
-
-.connection-card input,
-.connection-card button {
-    padding: 0.45rem 0.6rem;
-    border: 2px solid var(--color-text);
-    border-radius: 0.5rem;
-    background: var(--color-input-bg);
-    color: var(--color-text);
-    font-family: var(--font-secondary);
-    font-weight: 700;
-}
-
-.connection-card button {
-    cursor: pointer;
-    box-shadow: 2px 3px 0 var(--color-shadow);
-    transform: translateY(0);
-    transition: background 0.75s var(--ease-soft), box-shadow 0.75s var(--ease-soft), color 0.75s var(--ease-soft), border-color 0.75s var(--ease-soft), transform var(--motion-fast);
-}
-
-.connection-card button:hover {
-    background: var(--color-surface-hover);
-    transform: translateY(-2px);
-    box-shadow: 2px 5px 0 var(--color-shadow);
-}
-
 .connection-connect.connected:hover {
     border-color: var(--color-error);
     background: var(--color-error-bg);
     color: var(--color-error);
     box-shadow: 2px 5px 0 var(--color-error);
-}
-
-.connection-card button:active {
-    transform: translateY(2px) scale(0.98);
-    box-shadow: 1px 1px 0 var(--color-shadow);
 }
 
 .disconnect-hint {
@@ -198,29 +133,6 @@
     color: var(--color-error);
     box-shadow: 1px 2px 0 var(--color-error);
 }
-
-.connection-status {
-    min-height: 1.2em;
-    margin: 0.25rem 0 0;
-    font-family: var(--font-secondary);
-    font-size: 0.9rem;
-    font-weight: 700;
-}
-
-.connection-status:empty {
-    display: none;
-}
-
-.connection-status.ok {
-    color: var(--color-ok);
-}
-
-.connection-status.error {
-    color: var(--color-error);
-}
-
-
-
 
 .onboarding-panel {
     --onboarding-panel-top: clamp(10.8rem, 31vh, 17rem);
@@ -314,27 +226,17 @@ html.onboarding-active .onboarding-panel {
     right: 1rem;
     bottom: 0.85rem;
     padding: 0.38rem 0.78rem;
-    border: 2px solid var(--color-text);
     border-radius: 0.65rem;
-    background: var(--color-surface);
-    color: var(--color-text);
-    font-family: var(--font-main);
     font-size: 1.05rem;
-    font-weight: 900;
-    cursor: pointer;
-    box-shadow: 2px 3px 0 var(--color-shadow);
     transition: transform var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast);
 }
 
 .onboarding-skip:hover {
-    background: var(--color-surface-hover);
     transform: translateY(-2px);
-    box-shadow: 2px 5px 0 var(--color-shadow);
 }
 
 .onboarding-skip:active {
     transform: translateY(1px) scale(0.98);
-    box-shadow: 1px 1px 0 var(--color-shadow);
 }
 
 @media (max-width: 720px) {

@@ -13,7 +13,8 @@ this plan breaks the repo cleanup into small, reversible steps. each step should
 ## progress
 
 - [x] phase 1 css tokens and motion extraction started/completed in `css/tokens.css` and `css/motion.css`.
-- [ ] phase 2 shared css components.
+- [x] phase 2 shared css components started/completed in `css/components.css` for buttons, panels, cards, close controls, toggles, connection inputs, and status text.
+- [ ] runtime smoke validation after phase 1/2 css refactors.
 
 ## phase 0 — baseline
 
