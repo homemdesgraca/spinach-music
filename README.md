@@ -11,7 +11,7 @@ you can (and really should) use this alongside navidrome, all of the main cool f
 - opens in the browser from a local node server
 - connects to navidrome / subsonic
 - allows for library browsing, playback, lyrics, and now playing state
-- config is keept in web storage, but cache is disk-saved
+- config is kept in web storage, but cache is disk-saved
 
 ## later stuff
 
