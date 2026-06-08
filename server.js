@@ -13,7 +13,7 @@ const COVER_CACHE_DIR = join(ROOT, '.cache', 'covers');
 const COVER_ART_SIZE = 768;
 const COVER_BACKGROUND_SIZE = 1024;
 const COVER_BACKGROUND_HIGH_SIZE = 1600;
-const COVER_PALETTE_VERSION = 3;
+const COVER_PALETTE_VERSION = 4;
 const LYRICS_CACHE_TTL = 1000 * 60 * 60 * 24;
 const lyricsCache = new Map();
 const HAS_FILE_COMMAND = (() => {
@@ -606,7 +606,7 @@ const sendNavidromeCacheCover = async (request, response) => {
     try {
         const targets = await getNavidromeCoverTargets(request);
         const { palette } = await getFirstCachedRemoteArt(targets);
-        sendJson(response, 200, { ok: true, palette });
+        sendJson(response, 200, { ok: true, palette, paletteKey: palette?.paletteKey || '' });
     } catch (error) {
         if (error?.message === 'missing navidrome connection') {
             sendJson(response, 400, { ok: false, error: error.message });
@@ -903,14 +903,52 @@ const getLuminance = ([red, green, blue]) => {
 };
 
 const getHuePreference = (hue) => {
-    if (hue >= 300 || hue <= 30) return 1.32;
-    if (hue > 30 && hue <= 70) return 1.14;
-    if (hue >= 170 && hue <= 245) return 0.78;
-    if (hue > 245 && hue < 300) return 0.94;
+    if (hue >= 345 || hue <= 24) return 1.86;
+    if (hue > 24 && hue <= 58) return 1.58;
+    if (hue > 58 && hue <= 82) return 1.2;
+    if (hue >= 170 && hue <= 245) return 0.56;
+    if (hue > 245 && hue < 300) return 0.82;
     return 1;
 };
 
-const buildPaletteFromStats = ({ average, accent }) => {
+const getPaletteFingerprint = (pixels = []) => {
+    if (!pixels.length) {
+        return 'fallback';
+    }
+
+    const hueBins = Array.from({ length: 12 }, () => 0);
+    let chromaTotal = 0;
+    let saturationTotal = 0;
+    let lightnessTotal = 0;
+    let averageRed = 0;
+    let averageGreen = 0;
+    let averageBlue = 0;
+
+    pixels.forEach(({ color, hsl }) => {
+        const { hue, saturation, lightness } = hsl;
+        const chroma = Math.max(0.08, saturation) * (1 - (Math.abs(lightness - 0.5) * 0.9));
+        const hueIndex = Math.min(hueBins.length - 1, Math.floor(hue / 30));
+        hueBins[hueIndex] += chroma;
+        chromaTotal += chroma;
+        saturationTotal += saturation;
+        lightnessTotal += lightness;
+        averageRed += color[0];
+        averageGreen += color[1];
+        averageBlue += color[2];
+    });
+
+    const quantizedHue = hueBins.map((score) => Math.min(9, Math.round(((score / Math.max(chromaTotal, 0.001)) * 18)))).join('');
+    const count = pixels.length;
+    const saturation = Math.min(9, Math.round((saturationTotal / count) * 9));
+    const lightness = Math.min(9, Math.round((lightnessTotal / count) * 9));
+    const averageColor = [averageRed / count, averageGreen / count, averageBlue / count]
+        .map((channel) => Math.min(15, Math.round(channel / 17)).toString(16))
+        .join('');
+
+    return `p4-${quantizedHue}-${saturation}${lightness}-${averageColor}`;
+};
+
+const buildPaletteFromStats = ({ average, accent, paletteKey = 'fallback' }) => {
     const base = accent || average || [116, 198, 157];
     const isDark = getLuminance(base) < 0.42;
     const primary = isDark ? mixColor(base, [216, 243, 220], 0.24) : mixColor(base, [255, 255, 255], 0.12);
@@ -933,11 +971,12 @@ const buildPaletteFromStats = ({ average, accent }) => {
         overlay: isDark ? 'linear-gradient(rgba(255, 255, 255, 0.08), rgba(216, 243, 220, 0.2))' : 'linear-gradient(rgba(0, 35, 10, 0.08), rgba(0, 20, 8, 0.18))',
         average: rgbToHex(average || base),
         accent: rgbToHex(base),
+        paletteKey,
         isDark,
     };
 };
 
-const buildPaletteFromAverage = (average) => buildPaletteFromStats({ average, accent: average });
+const buildPaletteFromAverage = (average) => buildPaletteFromStats({ average, accent: average, paletteKey: 'fallback' });
 
 const extractPpmStats = (buffer) => {
     let cursor = 0;
@@ -975,6 +1014,7 @@ const extractPpmStats = (buffer) => {
 
     const pixelCount = width * height;
     const hueBins = Array.from({ length: 36 }, () => ({ red: 0, green: 0, blue: 0, score: 0, count: 0 }));
+    const pixels = [];
     let red = 0;
     let green = 0;
     let blue = 0;
@@ -986,19 +1026,23 @@ const extractPpmStats = (buffer) => {
         if (index + 2 >= buffer.length) break;
 
         const color = [buffer[index], buffer[index + 1], buffer[index + 2]];
+        const hsl = rgbToHsl(color);
         red += color[0];
         green += color[1];
         blue += color[2];
         count += 1;
+        pixels.push({ color, hsl });
 
-        const { hue, saturation, lightness } = rgbToHsl(color);
-        if (saturation < 0.18 || lightness < 0.12 || lightness > 0.94) {
+        const { hue, saturation, lightness } = hsl;
+        if (saturation < 0.16 || lightness < 0.08 || lightness > 0.96) {
             continue;
         }
 
         const bin = hueBins[Math.min(hueBins.length - 1, Math.floor(hue / 10))];
-        const lightnessWeight = 1 - (Math.abs(lightness - 0.52) * 0.72);
-        const score = (saturation ** 1.35) * Math.max(0.2, lightnessWeight);
+        const lightnessWeight = 1 - (Math.abs(lightness - 0.5) * 0.86);
+        const vividness = (saturation ** 1.72) * Math.max(0.18, lightnessWeight);
+        const warmthLift = getHuePreference(hue);
+        const score = vividness * warmthLift;
         bin.red += color[0] * score;
         bin.green += color[1] * score;
         bin.blue += color[2] * score;
@@ -1007,16 +1051,17 @@ const extractPpmStats = (buffer) => {
     }
 
     const average = count ? [red / count, green / count, blue / count] : [116, 198, 157];
+    const paletteKey = getPaletteFingerprint(pixels);
     let bestIndex = -1;
     let bestScore = 0;
 
     hueBins.forEach((bin, index) => {
         const previous = hueBins[(index - 1 + hueBins.length) % hueBins.length];
         const next = hueBins[(index + 1) % hueBins.length];
-        const clusterScore = bin.score + (previous.score * 0.62) + (next.score * 0.62);
-        const clusterCount = bin.count + (previous.count * 0.62) + (next.count * 0.62);
+        const clusterScore = bin.score + (previous.score * 0.58) + (next.score * 0.58);
+        const clusterCount = bin.count + (previous.count * 0.58) + (next.count * 0.58);
         const hue = index * 10;
-        const score = clusterScore * (Math.max(1, clusterCount) ** 0.26) * getHuePreference(hue);
+        const score = clusterScore * (Math.max(1, clusterCount) ** 0.1) * getHuePreference(hue);
         if (score > bestScore) {
             bestScore = score;
             bestIndex = index;
@@ -1024,7 +1069,7 @@ const extractPpmStats = (buffer) => {
     });
 
     if (bestIndex < 0 || bestScore < 0.5) {
-        return { average, accent: average };
+        return { average, accent: average, paletteKey };
     }
 
     const selectedBins = [
@@ -1044,7 +1089,7 @@ const extractPpmStats = (buffer) => {
         ? [accentTotals.red / accentTotals.score, accentTotals.green / accentTotals.score, accentTotals.blue / accentTotals.score]
         : average;
 
-    return { average, accent };
+    return { average, accent, paletteKey };
 };
 
 const extractCoverPalette = async (imagePath) => {

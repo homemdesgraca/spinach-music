@@ -46,6 +46,7 @@ const libraryFetchControllers = {
 
 const coverCache = new Map();
 const coverPaletteCache = new Map();
+const visualPaletteCache = new Map();
 const coverProgress = {
     mode: '',
     total: 0,
@@ -127,6 +128,61 @@ const hashText = (value) => String(value || '').split('').reduce((hash, char) =>
 ), 0);
 
 const getCardColors = (title, index = 0) => CARD_COLORS[Math.abs(hashText(title) + index) % CARD_COLORS.length];
+
+const getVisualPaletteKey = (paletteKey = '') => {
+    const parts = String(paletteKey || '').split('-');
+    return parts.length >= 3 ? parts.slice(0, 3).join('-') : String(paletteKey || '');
+};
+
+const clampColor = (value) => Math.max(0, Math.min(255, Math.round(value)));
+const colorToHex = (color) => `#${color.map((channel) => clampColor(channel).toString(16).padStart(2, '0')).join('')}`;
+const colorToRgba = (color, alpha) => `rgba(${color.map(clampColor).join(', ')}, ${alpha})`;
+const mixColor = (color, target, amount) => color.map((channel, index) => channel + ((target[index] - channel) * amount));
+const rgbToHsl = ([red, green, blue]) => {
+    const r = red / 255;
+    const g = green / 255;
+    const b = blue / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const lightness = (max + min) / 2;
+    const delta = max - min;
+
+    if (!delta) {
+        return { hue: 0, saturation: 0, lightness };
+    }
+
+    const saturation = delta / (1 - Math.abs((2 * lightness) - 1));
+    let hue;
+
+    if (max === r) {
+        hue = 60 * (((g - b) / delta) % 6);
+    } else if (max === g) {
+        hue = 60 * (((b - r) / delta) + 2);
+    } else {
+        hue = 60 * (((r - g) / delta) + 4);
+    }
+
+    return {
+        hue: hue < 0 ? hue + 360 : hue,
+        saturation,
+        lightness,
+    };
+};
+const getHuePreference = (hue) => {
+    if (hue >= 300 || hue <= 30) return 1.32;
+    if (hue > 30 && hue <= 70) return 1.14;
+    if (hue >= 170 && hue <= 245) return 0.78;
+    if (hue > 245 && hue < 300) return 0.94;
+    return 1;
+};
+const getLuminance = ([red, green, blue]) => {
+    const [r, g, b] = [red, green, blue].map((channel) => {
+        const value = channel / 255;
+        return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+
+    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+};
 
 const formatTrackDuration = (seconds) => {
     const value = Number(seconds);
@@ -288,6 +344,144 @@ const applyPaletteToCards = (coverKey, palette) => {
     });
 };
 
+const readImageColorStats = (image) => {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    const size = 48;
+
+    canvas.width = size;
+    canvas.height = size;
+    context.drawImage(image, 0, 0, size, size);
+
+    const { data } = context.getImageData(0, 0, size, size);
+    const average = [0, 0, 0];
+    const hueBins = Array.from({ length: 36 }, () => ({ red: 0, green: 0, blue: 0, score: 0, count: 0 }));
+    let count = 0;
+
+    for (let index = 0; index < data.length; index += 16) {
+        const alpha = data[index + 3];
+
+        if (alpha < 32) {
+            continue;
+        }
+
+        const color = [data[index], data[index + 1], data[index + 2]];
+        average[0] += color[0];
+        average[1] += color[1];
+        average[2] += color[2];
+        count += 1;
+
+        const { hue, saturation, lightness } = rgbToHsl(color);
+        if (saturation < 0.18 || lightness < 0.12 || lightness > 0.94) {
+            continue;
+        }
+
+        const bin = hueBins[Math.min(hueBins.length - 1, Math.floor(hue / 10))];
+        const lightnessWeight = 1 - (Math.abs(lightness - 0.52) * 0.72);
+        const score = (saturation ** 1.35) * Math.max(0.2, lightnessWeight);
+        bin.red += color[0] * score;
+        bin.green += color[1] * score;
+        bin.blue += color[2] * score;
+        bin.score += score;
+        bin.count += 1;
+    }
+
+    const averaged = count ? average.map((channel) => Math.round(channel / count)) : [116, 198, 157];
+    let bestIndex = -1;
+    let bestScore = 0;
+
+    hueBins.forEach((bin, index) => {
+        const previous = hueBins[(index - 1 + hueBins.length) % hueBins.length];
+        const next = hueBins[(index + 1) % hueBins.length];
+        const clusterScore = bin.score + (previous.score * 0.62) + (next.score * 0.62);
+        const clusterCount = bin.count + (previous.count * 0.62) + (next.count * 0.62);
+        const hue = index * 10;
+        const score = clusterScore * (Math.max(1, clusterCount) ** 0.26) * getHuePreference(hue);
+        if (score > bestScore) {
+            bestScore = score;
+            bestIndex = index;
+        }
+    });
+
+    if (bestIndex < 0 || bestScore < 0.5) {
+        return { average: averaged, accent: averaged };
+    }
+
+    const selectedBins = [
+        hueBins[(bestIndex - 1 + hueBins.length) % hueBins.length],
+        hueBins[bestIndex],
+        hueBins[(bestIndex + 1) % hueBins.length],
+    ];
+    const accentTotals = selectedBins.reduce((totals, bin) => ({
+        red: totals.red + bin.red,
+        green: totals.green + bin.green,
+        blue: totals.blue + bin.blue,
+        score: totals.score + bin.score,
+    }), { red: 0, green: 0, blue: 0, score: 0 });
+    const accent = accentTotals.score
+        ? [
+            Math.round(accentTotals.red / accentTotals.score),
+            Math.round(accentTotals.green / accentTotals.score),
+            Math.round(accentTotals.blue / accentTotals.score),
+        ]
+        : averaged;
+
+    return { average: averaged, accent };
+};
+
+const buildCardPaletteFromImage = (image) => {
+    const { average, accent } = readImageColorStats(image);
+    const base = accent || average;
+    const isDark = getLuminance(base) < 0.42;
+    const primary = isDark ? mixColor(base, [216, 243, 220], 0.24) : mixColor(base, [255, 255, 255], 0.12);
+    const secondary = isDark ? mixColor(base, [82, 183, 136], 0.34) : mixColor(base, [255, 255, 255], 0.42);
+    const text = isDark ? mixColor(base, [245, 255, 245], 0.9) : mixColor(base, [0, 35, 10], 0.86);
+    const shadow = isDark ? mixColor(base, [0, 0, 0], 0.74) : mixColor(base, [0, 20, 8], 0.78);
+    const surface = isDark ? mixColor(base, [0, 0, 0], 0.2) : mixColor(base, [255, 255, 255], 0.58);
+    const glow = isDark ? mixColor(base, [116, 198, 157], 0.36) : mixColor(base, [45, 106, 79], 0.26);
+    const sheen = isDark ? mixColor(base, [255, 255, 255], 0.64) : mixColor(base, [255, 255, 255], 0.68);
+
+    return {
+        version: 'client-cover',
+        primary: colorToHex(primary),
+        secondary: colorToHex(secondary),
+        text: colorToHex(text),
+        shadow: colorToHex(shadow),
+        surface: colorToHex(surface),
+        glow: colorToRgba(glow, isDark ? 0.42 : 0.34),
+        sheen: colorToRgba(sheen, isDark ? 0.3 : 0.42),
+        overlay: isDark ? 'linear-gradient(rgba(255, 255, 255, 0.08), rgba(216, 243, 220, 0.2))' : 'linear-gradient(rgba(0, 35, 10, 0.08), rgba(0, 20, 8, 0.18))',
+        average: colorToHex(average),
+        accent: colorToHex(base),
+        isDark,
+    };
+};
+
+const queueImagePalette = (card, image, coverKey) => {
+    if (!card || !image || !coverKey) {
+        return;
+    }
+
+    const apply = () => {
+        if (!image.naturalWidth || !image.naturalHeight || card.dataset.coverKey !== coverKey) {
+            return;
+        }
+
+        try {
+            const palette = buildCardPaletteFromImage(image);
+            coverPaletteCache.set(coverKey, palette);
+            applyPaletteToCards(coverKey, palette);
+        } catch {}
+    };
+
+    if (image.complete) {
+        requestAnimationFrame(apply);
+        return;
+    }
+
+    image.addEventListener('load', apply, { once: true });
+};
+
 const applyCoverToCards = (coverKey, coverUrl, palette = null) => {
     if (!coverUrl) {
         return;
@@ -316,6 +510,7 @@ const applyCoverToCards = (coverKey, coverUrl, palette = null) => {
         }
 
         image.src = coverUrl;
+        queueImagePalette(card, image, coverKey);
         cover.classList.add('has-cover');
     });
 };
@@ -377,8 +572,17 @@ const cacheLibraryCovers = async (mode, items, dataRun = libraryDataRun) => {
 
                 coverCache.set(key, item.coverRequestUrl || '');
                 if (payload?.palette) {
-                    coverPaletteCache.set(key, payload.palette);
-                    item.palette = payload.palette;
+                    const paletteKey = getVisualPaletteKey(payload.paletteKey || payload.palette.paletteKey || '');
+                    const sharedPalette = paletteKey && visualPaletteCache.has(paletteKey)
+                        ? visualPaletteCache.get(paletteKey)
+                        : payload.palette;
+
+                    if (paletteKey && !visualPaletteCache.has(paletteKey)) {
+                        visualPaletteCache.set(paletteKey, sharedPalette);
+                    }
+
+                    coverPaletteCache.set(key, sharedPalette);
+                    item.palette = sharedPalette;
                 }
                 item.coverUrl = item.coverRequestUrl || '';
                 items.forEach((candidate) => {
@@ -550,6 +754,7 @@ const resetLibraryDeckData = () => {
 
     coverCache.clear();
     coverPaletteCache.clear();
+    visualPaletteCache.clear();
     coverWarmupQueue = Promise.resolve();
     libraryDataRun += 1;
     coverProgress.mode = '';
@@ -837,6 +1042,7 @@ const createDeckCard = (item, index = 0) => {
         image.decoding = 'async';
         image.setAttribute('aria-hidden', 'true');
         image.src = coverUrl;
+        queueImagePalette(card, image, coverKey);
         coverElement.append(image);
     }
     card.append(coverElement);
