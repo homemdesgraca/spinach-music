@@ -212,6 +212,25 @@ const buildCoverUrl = (item, endpoint = COVER_ENDPOINT) => {
     return url;
 };
 
+const preloadNowPlayingBackground = (item, fallback = {}) => {
+    if (!item) {
+        return;
+    }
+
+    const coverUrl = item.coverRequestUrl
+        || item.coverUrl
+        || buildCoverUrl(item)?.toString()
+        || fallback.coverUrl
+        || '';
+
+    window.spinachNowPlaying?.preloadCoverBackground?.({
+        coverUrl,
+        title: item.title || fallback.title || '',
+        album: item.album || fallback.album || item.title || '',
+        artist: item.artist || item.subtitle || fallback.artist || '',
+    });
+};
+
 const updateCoverProgress = () => {
     if (!libraryProgressTooltip || !libraryProgressText) {
         return;
@@ -1351,6 +1370,11 @@ const openAlbumTracks = (album) => {
         return;
     }
 
+    preloadNowPlayingBackground(album, {
+        album: album.title || 'album',
+        artist: album.subtitle || album.artist || artistAlbumContext?.title || '',
+    });
+
     albumTracksContext = {
         id: album.id,
         title: album.title || 'album',
@@ -1418,10 +1442,12 @@ const playDeckCard = (card) => {
     }
 
     if (item.type === 'song' && deckMode === 'albumTracks') {
+        preloadNowPlayingBackground(item, albumTracksContext || {});
         window.spinachPlayer?.playQueue?.(deckBaseCards.filter((track) => track?.type === 'song'), itemIndex);
         return;
     }
 
+    preloadNowPlayingBackground(item);
     window.spinachPlayer?.playLibraryItem?.(item);
 };
 

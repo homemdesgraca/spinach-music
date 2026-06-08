@@ -69,6 +69,7 @@ let appliedCoverBackgroundUrl = '';
 let appliedCoverBackgroundIdentity = '';
 let coverBackgroundRun = 0;
 let currentSongData = null;
+const hintedCoverBackgrounds = new Map();
 let lastLyricsKey = '';
 let lyricsEntries = [];
 let activeLyricsIndex = -1;
@@ -473,6 +474,32 @@ const getStableCoverBackgroundUrl = (coverUrl) => {
             : url.toString();
     } catch {
         return coverUrl;
+    }
+};
+
+const preloadCoverBackgroundHint = (hint = {}) => {
+    if (!coverBackgroundEnabled) {
+        return '';
+    }
+
+    try {
+        const hintedCoverUrl = hint.coverUrl || hint.artUrl || '';
+        const backgroundCoverUrl = getStableCoverBackgroundUrl(hintedCoverUrl);
+
+        if (!backgroundCoverUrl || backgroundCoverUrl === appliedCoverBackgroundUrl || hintedCoverBackgrounds.has(backgroundCoverUrl)) {
+            return backgroundCoverUrl;
+        }
+
+        const preload = new Image();
+        const cleanup = () => window.setTimeout(() => hintedCoverBackgrounds.delete(backgroundCoverUrl), 15000);
+        hintedCoverBackgrounds.set(backgroundCoverUrl, preload);
+        preload.onload = cleanup;
+        preload.onerror = cleanup;
+        preload.src = backgroundCoverUrl;
+        preload.decode?.().then(cleanup).catch(cleanup);
+        return backgroundCoverUrl;
+    } catch {
+        return '';
     }
 };
 
@@ -1465,6 +1492,11 @@ window.addEventListener('spinach:player-message', (event) => {
 });
 
 window.addEventListener('spinach:player-source-change', refreshPlayerSource);
+
+window.spinachNowPlaying = {
+    ...(window.spinachNowPlaying || {}),
+    preloadCoverBackground: preloadCoverBackgroundHint,
+};
 
 setCoverThemeToggle();
 updateStatusPillWidth();

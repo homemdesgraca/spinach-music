@@ -14,6 +14,10 @@
     --color-error: #7a1f1f;
     --color-error-bg: #f3b5b5;
     --color-disc-line: rgba(11, 93, 30, 0.22);
+    --title-ink: color-mix(in srgb, var(--color-surface-hover) 56%, #f6ffe8);
+    --title-edge: color-mix(in srgb, var(--color-shadow) 76%, #073b16);
+    --title-shadow: rgba(0, 38, 12, 0.42);
+    --title-soft-shadow: rgba(245, 255, 238, 0.2);
 }
 
 html {
@@ -122,13 +126,15 @@ body::after {
 
 .top-section .title-txt,
 .top-section .subtitle-txt {
-    color: var(--color-text);
+    color: var(--title-ink);
     margin-left: 3vw;
     font-family: var(--font-main);
     font-weight: 900;
     letter-spacing: 0.04em;
-    text-shadow: 1px 1px 0 var(--color-shadow);
-    transition: color 0.85s cubic-bezier(0.16, 1, 0.3, 1), text-shadow 0.85s cubic-bezier(0.16, 1, 0.3, 1), margin 1.05s cubic-bezier(0.16, 1, 0.3, 1), font-size 1.05s cubic-bezier(0.16, 1, 0.3, 1);
+    paint-order: stroke fill;
+    -webkit-text-stroke-color: var(--title-edge);
+    text-shadow: 1px 1px 0 var(--title-shadow);
+    transition: color 0.85s cubic-bezier(0.16, 1, 0.3, 1), -webkit-text-stroke-color 0.85s cubic-bezier(0.16, 1, 0.3, 1), text-shadow 0.85s cubic-bezier(0.16, 1, 0.3, 1), margin 1.05s cubic-bezier(0.16, 1, 0.3, 1), font-size 1.05s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .top-section .title-txt,
@@ -142,10 +148,12 @@ body::after {
     font-size: clamp(3.2rem, 7vw, 6rem);
     line-height: 0.92;
     letter-spacing: 0.055em;
+    -webkit-text-stroke-width: 0.018em;
     text-shadow:
-        2px 2px 0 var(--color-shadow),
-        0 0 0.6rem var(--color-surface),
-        0.08em 0.08em 0 rgba(0, 35, 10, 0.22);
+        1px 1px 0 var(--title-edge),
+        2px 2px 0 var(--title-shadow),
+        0.065em 0.065em 0 rgba(0, 35, 10, 0.16),
+        0 -0.08rem 0.24rem var(--title-soft-shadow);
     transform-origin: left center;
     animation-name: slide-in-left-title;
 }
@@ -155,11 +163,13 @@ body::after {
     font-size: clamp(1.7rem, 3vw, 2.45rem);
     font-weight: 900;
     letter-spacing: 0.065em;
+    -webkit-text-stroke-width: 0.014em;
     text-shadow:
-        2px 2px 0 var(--color-shadow),
-        0 0 0.45rem var(--color-surface),
-        0.07em 0.07em 0 rgba(0, 35, 10, 0.2);
-    transition: color 0.85s cubic-bezier(0.16, 1, 0.3, 1), text-shadow 0.85s cubic-bezier(0.16, 1, 0.3, 1), opacity 3.65s cubic-bezier(0.16, 1, 0.3, 1), transform 4.2s cubic-bezier(0.16, 1, 0.3, 1);
+        1px 1px 0 var(--title-edge),
+        2px 2px 0 var(--title-shadow),
+        0.052em 0.052em 0 rgba(0, 35, 10, 0.14),
+        0 -0.06rem 0.2rem var(--title-soft-shadow);
+    transition: color 0.85s cubic-bezier(0.16, 1, 0.3, 1), -webkit-text-stroke-color 0.85s cubic-bezier(0.16, 1, 0.3, 1), text-shadow 0.85s cubic-bezier(0.16, 1, 0.3, 1), opacity 3.65s cubic-bezier(0.16, 1, 0.3, 1), transform 4.2s cubic-bezier(0.16, 1, 0.3, 1);
     animation-duration: 0.6s;
     animation-delay: 0.95s;
 }
