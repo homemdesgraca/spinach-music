@@ -34,7 +34,7 @@ const getErrorMessage = (error) => {
         return 'failed to fetch';
     }
 
-    return error?.message || 'failed to fetch';
+    return (error?.message || 'failed to fetch').toLowerCase();
 };
 
 let failedMoodTimeout;
@@ -73,7 +73,7 @@ const setConnectButtonMood = (mood = '', button = navidromeConnect) => {
     if (mood === 'failed') {
         failedMoodTimeout = setTimeout(() => {
             button.classList.remove('failed');
-        }, 1000);
+        }, 420);
     }
 };
 

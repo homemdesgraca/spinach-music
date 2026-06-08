@@ -527,6 +527,44 @@ const setVolumeSlider = (volume, persist = false) => {
 const mixColor = (color, target, amount) => color.map((channel, index) => Math.round(channel + (target[index] - channel) * amount));
 const colorToRgb = (color) => `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 const colorToRgba = (color, alpha) => `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
+const rgbToHsl = ([red, green, blue]) => {
+    const r = red / 255;
+    const g = green / 255;
+    const b = blue / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const lightness = (max + min) / 2;
+    const delta = max - min;
+
+    if (!delta) {
+        return { hue: 0, saturation: 0, lightness };
+    }
+
+    const saturation = delta / (1 - Math.abs((2 * lightness) - 1));
+    let hue;
+
+    if (max === r) {
+        hue = 60 * (((g - b) / delta) % 6);
+    } else if (max === g) {
+        hue = 60 * (((b - r) / delta) + 2);
+    } else {
+        hue = 60 * (((r - g) / delta) + 4);
+    }
+
+    return {
+        hue: hue < 0 ? hue + 360 : hue,
+        saturation,
+        lightness,
+    };
+};
+const getHuePreference = (hue) => {
+    if (hue >= 300 || hue <= 30) return 1.32;
+    if (hue > 30 && hue <= 70) return 1.14;
+    if (hue >= 170 && hue <= 245) return 0.78;
+    if (hue > 245 && hue < 300) return 0.94;
+    return 1;
+};
+
 const getLuminance = (color) => {
     const [red, green, blue] = color.map((channel) => {
         const normalized = channel / 255;
@@ -574,7 +612,7 @@ const resetCoverBackground = (disableBackground = false) => {
     resetCoverColors();
 };
 
-const readCoverColor = () => {
+const readCoverColorStats = () => {
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d', { willReadFrequently: true });
     const size = 48;
@@ -584,7 +622,8 @@ const readCoverColor = () => {
     context.drawImage(nowPlayingCover, 0, 0, size, size);
 
     const { data } = context.getImageData(0, 0, size, size);
-    const color = [0, 0, 0];
+    const average = [0, 0, 0];
+    const hueBins = Array.from({ length: 36 }, () => ({ red: 0, green: 0, blue: 0, score: 0, count: 0 }));
     let count = 0;
 
     for (let index = 0; index < data.length; index += 16) {
@@ -594,13 +633,68 @@ const readCoverColor = () => {
             continue;
         }
 
-        color[0] += data[index];
-        color[1] += data[index + 1];
-        color[2] += data[index + 2];
+        const color = [data[index], data[index + 1], data[index + 2]];
+        average[0] += color[0];
+        average[1] += color[1];
+        average[2] += color[2];
         count += 1;
+
+        const { hue, saturation, lightness } = rgbToHsl(color);
+        if (saturation < 0.18 || lightness < 0.12 || lightness > 0.94) {
+            continue;
+        }
+
+        const bin = hueBins[Math.min(hueBins.length - 1, Math.floor(hue / 10))];
+        const lightnessWeight = 1 - (Math.abs(lightness - 0.52) * 0.72);
+        const score = (saturation ** 1.35) * Math.max(0.2, lightnessWeight);
+        bin.red += color[0] * score;
+        bin.green += color[1] * score;
+        bin.blue += color[2] * score;
+        bin.score += score;
+        bin.count += 1;
     }
 
-    return count ? color.map((channel) => Math.round(channel / count)) : [116, 198, 157];
+    const averaged = count ? average.map((channel) => Math.round(channel / count)) : [116, 198, 157];
+    let bestIndex = -1;
+    let bestScore = 0;
+
+    hueBins.forEach((bin, index) => {
+        const previous = hueBins[(index - 1 + hueBins.length) % hueBins.length];
+        const next = hueBins[(index + 1) % hueBins.length];
+        const clusterScore = bin.score + (previous.score * 0.62) + (next.score * 0.62);
+        const clusterCount = bin.count + (previous.count * 0.62) + (next.count * 0.62);
+        const hue = index * 10;
+        const score = clusterScore * (Math.max(1, clusterCount) ** 0.26) * getHuePreference(hue);
+        if (score > bestScore) {
+            bestScore = score;
+            bestIndex = index;
+        }
+    });
+
+    if (bestIndex < 0 || bestScore < 0.5) {
+        return { average: averaged, accent: averaged };
+    }
+
+    const selectedBins = [
+        hueBins[(bestIndex - 1 + hueBins.length) % hueBins.length],
+        hueBins[bestIndex],
+        hueBins[(bestIndex + 1) % hueBins.length],
+    ];
+    const accentTotals = selectedBins.reduce((totals, bin) => ({
+        red: totals.red + bin.red,
+        green: totals.green + bin.green,
+        blue: totals.blue + bin.blue,
+        score: totals.score + bin.score,
+    }), { red: 0, green: 0, blue: 0, score: 0 });
+    const accent = accentTotals.score
+        ? [
+            Math.round(accentTotals.red / accentTotals.score),
+            Math.round(accentTotals.green / accentTotals.score),
+            Math.round(accentTotals.blue / accentTotals.score),
+        ]
+        : averaged;
+
+    return { average: averaged, accent };
 };
 
 const applyAdaptiveCoverColors = () => {
@@ -610,17 +704,18 @@ const applyAdaptiveCoverColors = () => {
     }
 
     try {
-        const average = readCoverColor();
-        const isDark = getLuminance(average) < 0.42;
-        const text = isDark ? mixColor(average, [245, 255, 245], 0.9) : mixColor(average, [0, 35, 10], 0.82);
-        const shadow = isDark ? mixColor(average, [0, 0, 0], 0.72) : mixColor(average, [0, 20, 8], 0.76);
-        const surface = isDark ? mixColor(average, [0, 0, 0], 0.18) : mixColor(average, [255, 255, 255], 0.44);
-        const surfaceHover = isDark ? mixColor(average, [255, 255, 255], 0.16) : mixColor(average, [255, 255, 255], 0.62);
-        const input = isDark ? mixColor(average, [0, 0, 0], 0.04) : mixColor(average, [255, 255, 255], 0.8);
+        const { average, accent } = readCoverColorStats();
+        const base = accent || average;
+        const isDark = getLuminance(base) < 0.42;
+        const text = isDark ? mixColor(base, [245, 255, 245], 0.9) : mixColor(base, [0, 35, 10], 0.82);
+        const shadow = isDark ? mixColor(base, [0, 0, 0], 0.72) : mixColor(base, [0, 20, 8], 0.76);
+        const surface = isDark ? mixColor(base, [0, 0, 0], 0.18) : mixColor(base, [255, 255, 255], 0.44);
+        const surfaceHover = isDark ? mixColor(base, [255, 255, 255], 0.16) : mixColor(base, [255, 255, 255], 0.62);
+        const input = isDark ? mixColor(base, [0, 0, 0], 0.04) : mixColor(base, [255, 255, 255], 0.8);
         const onInput = getLuminance(input) < 0.42 ? [245, 255, 245] : [0, 35, 10];
 
         const colors = {
-            '--color-page-bg': colorToRgb(average),
+            '--color-page-bg': colorToRgb(base),
             '--color-text': colorToRgb(text),
             '--color-shadow': colorToRgb(shadow),
             '--color-surface': colorToRgb(surface),
@@ -747,8 +842,9 @@ const applyCoverBackground = () => {
     }
 
     try {
-        const average = readCoverColor();
-        const isDark = getLuminance(average) < 0.42;
+        const { average, accent } = readCoverColorStats();
+        const base = accent || average;
+        const isDark = getLuminance(base) < 0.42;
         const overlay = !adaptiveCoverColorsEnabled
             ? 'linear-gradient(rgba(116, 198, 157, 0.34), rgba(216, 243, 220, 0.44))'
             : isDark
@@ -775,7 +871,7 @@ const applyCoverBackground = () => {
             url: isSameBackground && appliedCoverBackgroundUrl === backgroundCoverUrl ? appliedCoverBackgroundUrl : backgroundCoverUrl,
             identity: backgroundIdentity,
             overlay,
-            pageBg: colorToRgb(average),
+            pageBg: colorToRgb(base),
         }));
         applyAdaptiveCoverColors();
     } catch {

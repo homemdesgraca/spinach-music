@@ -13,6 +13,7 @@ const COVER_CACHE_DIR = join(ROOT, '.cache', 'covers');
 const COVER_ART_SIZE = 768;
 const COVER_BACKGROUND_SIZE = 1024;
 const COVER_BACKGROUND_HIGH_SIZE = 1600;
+const COVER_PALETTE_VERSION = 3;
 const LYRICS_CACHE_TTL = 1000 * 60 * 60 * 24;
 const lyricsCache = new Map();
 const HAS_FILE_COMMAND = (() => {
@@ -862,6 +863,36 @@ const clampColor = (value) => Math.max(0, Math.min(255, Math.round(value)));
 const rgbToHex = ([red, green, blue]) => `#${[red, green, blue].map((channel) => clampColor(channel).toString(16).padStart(2, '0')).join('')}`;
 const colorToRgba = ([red, green, blue], alpha) => `rgba(${clampColor(red)}, ${clampColor(green)}, ${clampColor(blue)}, ${alpha})`;
 const mixColor = (color, target, amount) => color.map((channel, index) => channel + ((target[index] - channel) * amount));
+const rgbToHsl = ([red, green, blue]) => {
+    const r = red / 255;
+    const g = green / 255;
+    const b = blue / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const lightness = (max + min) / 2;
+    const delta = max - min;
+
+    if (!delta) {
+        return { hue: 0, saturation: 0, lightness };
+    }
+
+    const saturation = delta / (1 - Math.abs((2 * lightness) - 1));
+    let hue;
+
+    if (max === r) {
+        hue = 60 * (((g - b) / delta) % 6);
+    } else if (max === g) {
+        hue = 60 * (((b - r) / delta) + 2);
+    } else {
+        hue = 60 * (((r - g) / delta) + 4);
+    }
+
+    return {
+        hue: hue < 0 ? hue + 360 : hue,
+        saturation,
+        lightness,
+    };
+};
 const getLuminance = ([red, green, blue]) => {
     const [r, g, b] = [red, green, blue].map((channel) => {
         const value = channel / 255;
@@ -871,17 +902,27 @@ const getLuminance = ([red, green, blue]) => {
     return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
 };
 
-const buildPaletteFromAverage = (average) => {
-    const isDark = getLuminance(average) < 0.42;
-    const primary = isDark ? mixColor(average, [216, 243, 220], 0.32) : mixColor(average, [0, 62, 24], 0.18);
-    const secondary = isDark ? mixColor(average, [82, 183, 136], 0.48) : mixColor(average, [216, 243, 220], 0.46);
-    const text = isDark ? mixColor(average, [245, 255, 245], 0.9) : mixColor(average, [0, 35, 10], 0.86);
-    const shadow = isDark ? mixColor(average, [0, 0, 0], 0.74) : mixColor(average, [0, 20, 8], 0.78);
-    const surface = isDark ? mixColor(average, [0, 0, 0], 0.2) : mixColor(average, [255, 255, 255], 0.58);
-    const glow = isDark ? mixColor(average, [116, 198, 157], 0.42) : mixColor(average, [45, 106, 79], 0.36);
-    const sheen = isDark ? mixColor(average, [255, 255, 255], 0.64) : mixColor(average, [216, 243, 220], 0.7);
+const getHuePreference = (hue) => {
+    if (hue >= 300 || hue <= 30) return 1.32;
+    if (hue > 30 && hue <= 70) return 1.14;
+    if (hue >= 170 && hue <= 245) return 0.78;
+    if (hue > 245 && hue < 300) return 0.94;
+    return 1;
+};
+
+const buildPaletteFromStats = ({ average, accent }) => {
+    const base = accent || average || [116, 198, 157];
+    const isDark = getLuminance(base) < 0.42;
+    const primary = isDark ? mixColor(base, [216, 243, 220], 0.24) : mixColor(base, [255, 255, 255], 0.12);
+    const secondary = isDark ? mixColor(base, [82, 183, 136], 0.34) : mixColor(base, [255, 255, 255], 0.42);
+    const text = isDark ? mixColor(base, [245, 255, 245], 0.9) : mixColor(base, [0, 35, 10], 0.86);
+    const shadow = isDark ? mixColor(base, [0, 0, 0], 0.74) : mixColor(base, [0, 20, 8], 0.78);
+    const surface = isDark ? mixColor(base, [0, 0, 0], 0.2) : mixColor(base, [255, 255, 255], 0.58);
+    const glow = isDark ? mixColor(base, [116, 198, 157], 0.36) : mixColor(base, [45, 106, 79], 0.26);
+    const sheen = isDark ? mixColor(base, [255, 255, 255], 0.64) : mixColor(base, [255, 255, 255], 0.68);
 
     return {
+        version: COVER_PALETTE_VERSION,
         primary: rgbToHex(primary),
         secondary: rgbToHex(secondary),
         text: rgbToHex(text),
@@ -890,11 +931,15 @@ const buildPaletteFromAverage = (average) => {
         glow: colorToRgba(glow, isDark ? 0.42 : 0.34),
         sheen: colorToRgba(sheen, isDark ? 0.3 : 0.42),
         overlay: isDark ? 'linear-gradient(rgba(255, 255, 255, 0.08), rgba(216, 243, 220, 0.2))' : 'linear-gradient(rgba(0, 35, 10, 0.08), rgba(0, 20, 8, 0.18))',
+        average: rgbToHex(average || base),
+        accent: rgbToHex(base),
         isDark,
     };
 };
 
-const extractPpmAverage = (buffer) => {
+const buildPaletteFromAverage = (average) => buildPaletteFromStats({ average, accent: average });
+
+const extractPpmStats = (buffer) => {
     let cursor = 0;
     const readToken = () => {
         while (cursor < buffer.length) {
@@ -929,22 +974,77 @@ const extractPpmAverage = (buffer) => {
     }
 
     const pixelCount = width * height;
+    const hueBins = Array.from({ length: 36 }, () => ({ red: 0, green: 0, blue: 0, score: 0, count: 0 }));
     let red = 0;
     let green = 0;
     let blue = 0;
     let count = 0;
-    const stride = Math.max(1, Math.floor(pixelCount / 4096));
+    const stride = Math.max(1, Math.floor(pixelCount / 8192));
 
     for (let pixel = 0; pixel < pixelCount; pixel += stride) {
         const index = cursor + (pixel * 3);
         if (index + 2 >= buffer.length) break;
-        red += buffer[index];
-        green += buffer[index + 1];
-        blue += buffer[index + 2];
+
+        const color = [buffer[index], buffer[index + 1], buffer[index + 2]];
+        red += color[0];
+        green += color[1];
+        blue += color[2];
         count += 1;
+
+        const { hue, saturation, lightness } = rgbToHsl(color);
+        if (saturation < 0.18 || lightness < 0.12 || lightness > 0.94) {
+            continue;
+        }
+
+        const bin = hueBins[Math.min(hueBins.length - 1, Math.floor(hue / 10))];
+        const lightnessWeight = 1 - (Math.abs(lightness - 0.52) * 0.72);
+        const score = (saturation ** 1.35) * Math.max(0.2, lightnessWeight);
+        bin.red += color[0] * score;
+        bin.green += color[1] * score;
+        bin.blue += color[2] * score;
+        bin.score += score;
+        bin.count += 1;
     }
 
-    return count ? [red / count, green / count, blue / count] : [116, 198, 157];
+    const average = count ? [red / count, green / count, blue / count] : [116, 198, 157];
+    let bestIndex = -1;
+    let bestScore = 0;
+
+    hueBins.forEach((bin, index) => {
+        const previous = hueBins[(index - 1 + hueBins.length) % hueBins.length];
+        const next = hueBins[(index + 1) % hueBins.length];
+        const clusterScore = bin.score + (previous.score * 0.62) + (next.score * 0.62);
+        const clusterCount = bin.count + (previous.count * 0.62) + (next.count * 0.62);
+        const hue = index * 10;
+        const score = clusterScore * (Math.max(1, clusterCount) ** 0.26) * getHuePreference(hue);
+        if (score > bestScore) {
+            bestScore = score;
+            bestIndex = index;
+        }
+    });
+
+    if (bestIndex < 0 || bestScore < 0.5) {
+        return { average, accent: average };
+    }
+
+    const selectedBins = [
+        hueBins[(bestIndex - 1 + hueBins.length) % hueBins.length],
+        hueBins[bestIndex],
+        hueBins[(bestIndex + 1) % hueBins.length],
+    ];
+    const accentTotals = selectedBins.reduce((totals, bin) => ({
+        red: totals.red + bin.red,
+        green: totals.green + bin.green,
+        blue: totals.blue + bin.blue,
+        score: totals.score + bin.score,
+        count: totals.count + bin.count,
+    }), { red: 0, green: 0, blue: 0, score: 0, count: 0 });
+
+    const accent = accentTotals.score
+        ? [accentTotals.red / accentTotals.score, accentTotals.green / accentTotals.score, accentTotals.blue / accentTotals.score]
+        : average;
+
+    return { average, accent };
 };
 
 const extractCoverPalette = async (imagePath) => {
@@ -979,7 +1079,7 @@ const extractCoverPalette = async (imagePath) => {
             });
         });
 
-        return buildPaletteFromAverage(extractPpmAverage(ppm));
+        return buildPaletteFromStats(extractPpmStats(ppm));
     } catch {
         return buildPaletteFromAverage([116, 198, 157]);
     }
@@ -990,8 +1090,9 @@ const cacheRemoteArt = async (artUrl, cacheKey) => {
 
     try {
         const meta = JSON.parse(await readFile(metaPath, 'utf8'));
-        if (!meta.palette) {
+        if (!meta.palette || meta.paletteVersion !== COVER_PALETTE_VERSION || meta.palette.version !== COVER_PALETTE_VERSION) {
             meta.palette = await extractCoverPalette(imagePath);
+            meta.paletteVersion = COVER_PALETTE_VERSION;
             await writeFile(metaPath, JSON.stringify(meta));
         }
         return { imagePath, contentType: meta.contentType || 'image/jpeg', cached: true, palette: meta.palette };
@@ -1005,7 +1106,7 @@ const cacheRemoteArt = async (artUrl, cacheKey) => {
     await mkdir(COVER_CACHE_DIR, { recursive: true });
     await writeFile(imagePath, buffer);
     const palette = await extractCoverPalette(imagePath);
-    await writeFile(metaPath, JSON.stringify({ contentType, cachedAt: new Date().toISOString(), palette }));
+    await writeFile(metaPath, JSON.stringify({ contentType, cachedAt: new Date().toISOString(), paletteVersion: COVER_PALETTE_VERSION, palette }));
 
     return { imagePath, contentType, cached: false, buffer, palette };
 };

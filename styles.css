@@ -165,9 +165,10 @@ body::after {
 }
 
 html.onboarding-active .top-section {
-    top: 18vh;
+    top: clamp(0.8rem, 5vh, 2.6rem);
     left: 50%;
     z-index: 35;
+    width: min(94vw, 58rem);
     align-items: center;
     text-align: center;
     transform: translateX(-50%);
@@ -175,16 +176,24 @@ html.onboarding-active .top-section {
 
 html.onboarding-active .top-section .title-txt,
 html.onboarding-active .top-section .subtitle-txt {
+    max-width: 100%;
     margin-left: 0;
     margin-right: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
     animation-name: none;
 }
 
 html.onboarding-active .top-section .title-txt {
-    font-size: clamp(3.4rem, 8vw, 7rem);
+    font-size: clamp(2rem, min(6.4vw, 9.2vh), 6.4rem);
+    line-height: 0.86;
 }
 
 html.onboarding-active .top-section .subtitle-txt {
+    margin-top: 0.35rem;
+    font-size: clamp(1.05rem, min(2.75vw, 4vh), 2.15rem);
+    line-height: 0.95;
     opacity: 1;
     transform: translateX(0);
 }
@@ -473,6 +482,9 @@ body.library-mode .library-deck {
 }
 
 .library-card.has-cover-palette {
+    background:
+        linear-gradient(145deg, var(--card-sheen, rgba(216, 243, 220, 0.34)), transparent 42%),
+        linear-gradient(135deg, color-mix(in srgb, var(--cover-a, #95d5b2) 68%, var(--card-surface, var(--color-input-bg))), color-mix(in srgb, var(--cover-b, #40916c) 58%, var(--card-surface, var(--color-input-bg))));
     box-shadow:
         0 0 1.25rem var(--card-glow, rgba(82, 183, 136, 0.28)),
         2px 3px 0 var(--card-shadow, var(--color-shadow));
