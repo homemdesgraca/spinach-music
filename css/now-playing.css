@@ -1,0 +1,454 @@
+.now-playing-bar {
+    position: fixed;
+    z-index: 1;
+    isolation: isolate;
+    left: 3%;
+    bottom: 1.5rem;
+    width: fit-content;
+    min-width: min(21rem, 84vw);
+    max-width: min(38rem, 86vw);
+    min-height: 4.2rem;
+    padding: 0.7rem 1.2rem 0.7rem 1rem;
+    border: 2px solid transparent;
+    border-radius: 1.15rem;
+    background: transparent;
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-size: 1.12rem;
+    font-weight: 800;
+    box-shadow: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    overflow: visible;
+    transition: width 0.35s var(--ease-soft), max-width 0.35s var(--ease-soft), color 0.85s var(--ease-soft), top 1.75s var(--ease-soft), bottom 1.75s var(--ease-soft), transform 1.75s var(--ease-soft);
+    animation: slide-in-bottom 0.8s var(--ease-soft) both;
+}
+
+body.library-mode .now-playing-bar {
+    top: clamp(9.15rem, 13vw, 11rem);
+    bottom: auto;
+    z-index: 5;
+    animation-name: none;
+}
+
+.now-playing-bar.is-layout-controlled {
+    animation-name: none;
+}
+
+.now-playing-bar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border: 2px solid var(--color-text);
+    border-radius: 1.15rem;
+    background: var(--color-surface);
+    box-shadow: 2px 3px 0 var(--color-shadow);
+    transition: background 0.85s var(--ease-soft), border-color 0.85s var(--ease-soft), box-shadow 0.85s var(--ease-soft);
+}
+
+.cover-theme-button,
+.now-playing-copy,
+.now-playing-disc {
+    position: relative;
+    z-index: 2;
+}
+
+.cover-theme-button {
+    flex: 0 0 auto;
+    width: 3.85rem;
+    height: 3.85rem;
+    margin: 0 0.05rem 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0.22rem;
+    background: transparent;
+    cursor: pointer;
+}
+
+.cover-theme-button:not(.has-cover) {
+    display: none;
+}
+
+.cover-theme-button:disabled {
+    cursor: default;
+}
+
+.cover-theme-button:hover #now-playing-cover.has-cover {
+    transform: translateY(-1px) scale(1.03);
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+.player-controls,
+.player-progress-pill {
+    position: absolute;
+    left: calc(var(--status-pill-width, 6.4rem) + 0.6rem);
+    right: auto;
+    z-index: 0;
+    border: 2px solid var(--color-text);
+    background: var(--color-surface);
+    box-shadow: 2px 3px 0 var(--color-shadow);
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: auto;
+    transform: scale(0.96);
+    transition: opacity 0.22s ease-out 0.35s, bottom 0.42s var(--ease-soft) 0.35s, transform 0.42s var(--ease-soft) 0.35s, visibility 0s linear 0.67s;
+}
+
+.player-controls {
+    bottom: 0.35rem;
+    box-sizing: border-box;
+    width: 12.25rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.45rem;
+    padding: 0.35rem 0.55rem;
+    border-radius: 0.8rem;
+}
+
+.player-progress-pill {
+    bottom: 0.1rem;
+    box-sizing: border-box;
+    width: 12.25rem;
+    padding: 0.38rem 0.62rem;
+    border-radius: 999px;
+}
+
+.now-playing-bar:hover .player-controls,
+.player-controls:hover {
+    bottom: calc(100% + 2.45rem);
+    visibility: visible;
+    opacity: 1;
+    transform: scale(1);
+    transition-delay: 0s;
+}
+
+.now-playing-bar:hover .player-progress-pill,
+.player-controls:hover + .player-progress-pill,
+.player-progress-pill:hover {
+    bottom: calc(100% + 0.45rem);
+    visibility: visible;
+    opacity: 1;
+    transform: scale(1);
+    transition-delay: 0s;
+}
+
+.player-control {
+    padding: 0.28rem 0.45rem;
+    border: 2px solid var(--color-text);
+    border-radius: 0.5rem;
+    background: var(--color-input-bg);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 1px 2px 0 var(--color-shadow);
+    transition: background var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
+}
+
+.player-control:hover {
+    background: var(--color-surface-hover);
+    transform: translateY(-1px);
+    box-shadow: 1px 3px 0 var(--color-shadow);
+}
+
+.player-control:active {
+    transform: translateY(1px) scale(0.98);
+    box-shadow: 1px 1px 0 var(--color-shadow);
+}
+
+.player-control.is-active-state {
+    background: var(--color-text);
+    color: var(--color-input-bg);
+}
+
+.progress-time-bubble {
+    position: absolute;
+    left: var(--bubble-left, 0%);
+    bottom: calc(100% + 0.32rem);
+    padding: 0.14rem 0.38rem;
+    border: 2px solid var(--color-text);
+    border-radius: 999px;
+    background: var(--color-input-bg);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+    box-shadow: 1px 2px 0 var(--color-shadow);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(0.18rem) scale(0.92);
+    transition: opacity var(--motion-snappy), transform var(--motion-snappy);
+}
+
+.player-progress-pill:hover .progress-time-bubble,
+.player-progress-pill:focus-within .progress-time-bubble {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+}
+
+#now-playing-progress {
+    appearance: none;
+    display: block;
+    width: 100%;
+    height: 0.78rem;
+    margin: 0;
+    background: transparent;
+    accent-color: var(--color-text);
+    cursor: ew-resize;
+}
+
+#now-playing-progress:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+#now-playing-progress::-webkit-slider-runnable-track {
+    height: 0.42rem;
+    border: 1px solid var(--color-text);
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--color-text) var(--progress, 0%), var(--color-input-bg) var(--progress, 0%));
+}
+
+#now-playing-progress::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.22rem;
+    height: 0.72rem;
+    margin-top: -0.2rem;
+    border: 2px solid var(--color-text);
+    border-radius: 0.38rem;
+    background:
+        repeating-linear-gradient(135deg, rgba(11, 93, 30, 0.32) 0 0.08rem, transparent 0.08rem 0.18rem),
+        repeating-linear-gradient(45deg, transparent 0 0.22rem, rgba(216, 243, 220, 0.75) 0.22rem 0.3rem),
+        var(--color-surface);
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+#now-playing-progress:active::-webkit-slider-thumb {
+    transform: scaleX(1.08);
+}
+
+#now-playing-progress::-moz-range-track {
+    height: 0.42rem;
+    border: 1px solid var(--color-text);
+    border-radius: 999px;
+    background: var(--color-input-bg);
+}
+
+#now-playing-progress::-moz-range-progress {
+    height: 0.42rem;
+    border-radius: 999px;
+    background: var(--color-text);
+}
+
+#now-playing-progress::-moz-range-thumb {
+    width: 1.05rem;
+    height: 0.54rem;
+    transform: translateY(-1px);
+    border: 2px solid var(--color-text);
+    border-radius: 0.38rem;
+    background:
+        repeating-linear-gradient(135deg, rgba(11, 93, 30, 0.32) 0 0.08rem, transparent 0.08rem 0.18rem),
+        repeating-linear-gradient(45deg, transparent 0 0.22rem, rgba(216, 243, 220, 0.75) 0.22rem 0.3rem),
+        var(--color-surface);
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+#now-playing-progress:active::-moz-range-thumb {
+    transform: scaleX(1.08);
+}
+
+.now-playing-copy {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: min(18rem, 48vw);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.24rem;
+}
+
+.now-playing-bar span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.now-playing-disc {
+    position: relative;
+    flex: 0 0 auto;
+    margin-left: auto;
+    width: 2.55rem;
+    height: 2.55rem;
+    border: 2px solid var(--color-text);
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 48% 46%, var(--color-surface-hover) 0 0.34rem, var(--color-text) 0.36rem 0.42rem, var(--color-input-bg) 0.44rem 100%);
+    box-shadow: 1px 2px 0 var(--color-shadow), inset 0 0 0 0.12rem rgba(216, 243, 220, 0.22);
+    overflow: hidden;
+}
+
+.now-playing-disc::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+        linear-gradient(112deg, transparent 0 42%, rgba(216, 243, 220, 0.62) 44% 47%, transparent 49% 100%) 66% 22% / 0.92rem 0.16rem no-repeat,
+        linear-gradient(119deg, transparent 0 42%, rgba(11, 93, 30, 0.38) 44% 47%, transparent 49% 100%) 23% 72% / 0.78rem 0.13rem no-repeat,
+        linear-gradient(104deg, transparent 0 42%, rgba(216, 243, 220, 0.48) 44% 47%, transparent 49% 100%) 74% 68% / 0.62rem 0.12rem no-repeat,
+        linear-gradient(124deg, transparent 0 42%, rgba(11, 93, 30, 0.32) 44% 47%, transparent 49% 100%) 31% 27% / 0.52rem 0.1rem no-repeat,
+        conic-gradient(from 18deg, rgba(255, 255, 255, 0.2), transparent 18deg 238deg, rgba(216, 243, 220, 0.18) 275deg, transparent 318deg),
+        repeating-radial-gradient(circle, transparent 0 0.16rem, var(--color-disc-line) 0.175rem 0.19rem, transparent 0.21rem 0.31rem),
+        radial-gradient(circle, transparent 0 0.72rem, var(--color-disc-line) 0.79rem 0.815rem, transparent 0.84rem 100%);
+    opacity: 0.94;
+    animation: disc-spin 0.85s linear infinite;
+    animation-play-state: paused;
+}
+
+.now-playing-disc::after {
+    content: '';
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    left: 50%;
+    box-sizing: border-box;
+    width: 18px;
+    height: 18px;
+    margin: -9px 0 0 -9px;
+    border: 2px solid var(--color-text);
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at center, var(--color-shadow) 0 3px, transparent 3.5px 5px),
+        radial-gradient(circle at center, var(--color-surface-hover) 0 7px, var(--color-input-bg) 7.5px 100%);
+    box-shadow: 0 0 0 2px rgba(216, 243, 220, 0.18);
+    transform: none;
+}
+
+.now-playing-bar.is-playing:not(.is-paused) .now-playing-disc::before {
+    animation-play-state: running;
+}
+
+.now-playing-bar.is-paused .now-playing-disc::before,
+.now-playing-bar.is-empty .now-playing-disc::before {
+    animation-play-state: paused;
+}
+
+.now-playing-face {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    display: none;
+    place-items: center;
+    color: var(--color-error);
+    font-family: var(--font-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+    transform: rotate(0deg);
+}
+
+.now-playing-bar.is-empty .now-playing-disc::before,
+.now-playing-bar.is-empty .now-playing-disc::after {
+    opacity: 0.28;
+}
+
+.now-playing-bar.is-empty .now-playing-face {
+    display: grid;
+}
+
+.now-playing-title-line,
+.now-playing-album-line,
+.now-playing-artist-line {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    line-height: 1.22;
+    padding-bottom: 0.08rem;
+}
+
+#now-playing-title,
+#now-playing-album,
+#now-playing-artist {
+    display: inline-block;
+    min-width: 0;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    will-change: transform;
+}
+
+#now-playing-title {
+    font-size: 1.08em;
+    font-weight: 900;
+    line-height: 1.18;
+}
+
+#now-playing-album {
+    font-size: 0.92rem;
+    font-weight: 900;
+    line-height: 1;
+    opacity: 0.88;
+}
+
+#now-playing-artist {
+    font-size: 0.78rem;
+    line-height: 1;
+    opacity: 0.78;
+}
+
+#now-playing-title.is-overflowing,
+#now-playing-artist.is-overflowing {
+    max-width: none;
+}
+
+#now-playing-cover {
+    width: 100%;
+    height: 100%;
+    border-radius: 0.22rem;
+    object-fit: cover;
+    display: none;
+    transition: transform var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+#now-playing-cover.has-cover {
+    display: block;
+}
+
+.now-playing-status-pill {
+    position: absolute;
+    z-index: 2;
+    left: 0;
+    bottom: calc(100% + 0.45rem);
+    width: fit-content;
+    max-width: min(14rem, 60vw);
+    padding: 0.28rem 0.65rem;
+    border: 2px solid var(--color-text);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+#now-playing-timer {
+    display: block;
+    line-height: 1;
+    opacity: 0.78;
+}

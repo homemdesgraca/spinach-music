@@ -18,3 +18,5 @@ Spinach Music is a simple web music UI with a green aesthetic and a Navidrome/Su
 - Keep connection form data persisted with web storage.
 - Keep UI feedback tactile and animated, but subtle.
 - When adding new UI text or labels, match the established lowercase style.
+- do not start long-running local servers or run disruptive validation commands unless the user explicitly asks.
+- plan.md may be edited for working notes, but keep it out of git/tracked history unless the user says otherwise.

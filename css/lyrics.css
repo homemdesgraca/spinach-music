@@ -1,0 +1,184 @@
+.lyrics-drawer {
+    position: fixed;
+    top: 50%;
+    right: 0;
+    z-index: 8;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.lyrics-tab {
+    position: absolute;
+    right: 0;
+    z-index: 2;
+    width: 2.7rem;
+    border: 2px solid var(--color-text);
+    border-right: 0;
+    border-radius: 0.85rem 0 0 0.85rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-weight: 900;
+    pointer-events: auto;
+    box-shadow: -2px 3px 0 var(--color-shadow);
+}
+
+.lyrics-tab {
+    top: 50%;
+    min-height: 8.2rem;
+    padding: 0.7rem 0.34rem;
+    font-size: 1.2rem;
+    letter-spacing: 0.08em;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    cursor: pointer;
+    transform: translateY(-50%) rotate(1deg);
+}
+
+.lyrics-tab:hover {
+    background: var(--color-surface-hover);
+    box-shadow: -3px 5px 0 var(--color-shadow);
+    transform: translateY(-50%) translateX(-0.12rem) rotate(-1deg);
+}
+
+.lyrics-card {
+    position: relative;
+    width: min(24rem, 82vw);
+    max-height: min(33rem, 78vh);
+    box-sizing: border-box;
+    padding: 1rem 1.1rem 1.1rem;
+    border: 2px solid var(--color-text);
+    border-right: 0;
+    border-radius: 1.05rem 0 0 1.05rem;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    box-shadow: -3px 5px 0 var(--color-shadow);
+    overflow: hidden;
+    pointer-events: auto;
+    transform: translateX(calc(100% + 0.4rem)) rotate(1.4deg);
+    opacity: 0;
+}
+
+.lyrics-drawer.open .lyrics-card {
+    transform: translateX(0) rotate(-0.6deg);
+    opacity: 1;
+}
+
+.lyrics-drawer.open .lyrics-tab {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(0.8rem, -50%) rotate(4deg) scale(0.92);
+}
+
+.lyrics-close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.85rem;
+    z-index: 3;
+    min-width: 3.4rem;
+    min-height: 2rem;
+    padding: 0.32rem 0.58rem;
+    border: 2px solid var(--color-text);
+    border-radius: 999px;
+    background: var(--color-input-bg);
+    color: var(--color-text);
+    font-family: var(--font-secondary);
+    font-size: 0.78rem;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+.lyrics-close:hover {
+    background: var(--color-surface-hover);
+    transform: translateY(-1px);
+    box-shadow: 1px 3px 0 var(--color-shadow);
+}
+
+.lyrics-kicker {
+    margin: 0 0 0.1rem;
+    font-size: 0.72rem;
+    font-weight: 900;
+    opacity: 0.72;
+}
+
+.lyrics-card h2 {
+    margin: 0 0 0.6rem;
+    font-family: var(--font-main);
+    font-size: 2.1rem;
+    font-weight: 900;
+    line-height: 0.9;
+    text-shadow: 1px 1px 0 var(--color-shadow);
+}
+
+.lyrics-status {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 900;
+    opacity: 0.78;
+}
+
+.lyrics-lines {
+    max-height: min(24rem, 56vh);
+    padding: 0.25rem 0.45rem 0.6rem 0;
+    overflow: hidden auto;
+    scrollbar-color: var(--color-text) var(--color-input-bg);
+    scrollbar-width: thin;
+}
+
+.lyrics-lines::-webkit-scrollbar {
+    width: 0.78rem;
+}
+
+.lyrics-lines::-webkit-scrollbar-track {
+    border: 1px solid var(--color-text);
+    border-radius: 999px;
+    background: var(--color-input-bg);
+}
+
+.lyrics-lines::-webkit-scrollbar-thumb {
+    min-height: 2.4rem;
+    border: 2px solid var(--color-text);
+    border-radius: 0.38rem;
+    background:
+        repeating-linear-gradient(135deg, rgba(11, 93, 30, 0.32) 0 0.08rem, transparent 0.08rem 0.18rem),
+        repeating-linear-gradient(45deg, transparent 0 0.22rem, rgba(216, 243, 220, 0.75) 0.22rem 0.3rem),
+        var(--color-surface);
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+.lyrics-lines::-webkit-scrollbar-thumb:hover {
+    background:
+        repeating-linear-gradient(135deg, rgba(11, 93, 30, 0.42) 0 0.08rem, transparent 0.08rem 0.18rem),
+        repeating-linear-gradient(45deg, transparent 0 0.22rem, rgba(216, 243, 220, 0.88) 0.22rem 0.3rem),
+        var(--color-surface-hover);
+}
+
+.lyrics-line {
+    margin: 0.22rem 0;
+    padding: 0.28rem 0.45rem;
+    border-radius: 0.55rem;
+    font-size: 0.92rem;
+    font-weight: 700;
+    line-height: 1.28;
+    opacity: 0.52;
+    transition: opacity 0.22s ease-out, transform 0.22s ease-out, background 0.22s ease-out, box-shadow 0.22s ease-out;
+}
+
+.lyrics-line[data-time] {
+    cursor: pointer;
+}
+
+.lyrics-line[data-time]:hover {
+    background: var(--color-surface-hover);
+    opacity: 0.9;
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
+
+.lyrics-line.active {
+    background: var(--color-input-bg);
+    opacity: 1;
+    transform: translateX(-0.08rem) scale(1.015);
+    box-shadow: 1px 2px 0 var(--color-shadow);
+}
