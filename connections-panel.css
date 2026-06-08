@@ -15,7 +15,7 @@
     opacity: 0;
     pointer-events: none;
     transform: translateY(-0.7rem) scale(0.95);
-    transition: opacity 0.25s ease-out, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity 0.25s ease-out, transform 0.35s var(--ease-soft), background 0.75s var(--ease-soft), color 0.75s var(--ease-soft), border-color 0.75s var(--ease-soft), box-shadow 0.75s var(--ease-soft);
 }
 
 .connections-panel.open {
@@ -129,7 +129,7 @@
     font-weight: 900;
     text-decoration: underline;
     cursor: pointer;
-    transition: transform 0.18s ease-out, color 0.18s ease-out;
+    transition: transform var(--motion-fast), color var(--motion-fast);
 }
 
 .panel-close:hover {
@@ -156,7 +156,7 @@
     cursor: pointer;
     box-shadow: 2px 3px 0 var(--color-shadow);
     transform: translateY(0);
-    transition: background 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s ease-out;
+    transition: background 0.75s var(--ease-soft), box-shadow 0.75s var(--ease-soft), color 0.75s var(--ease-soft), border-color 0.75s var(--ease-soft), transform var(--motion-fast);
 }
 
 .connection-card button:hover {
@@ -187,12 +187,12 @@
 }
 
 .connection-connect.connected {
-    animation: connect-celebrate 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: connect-celebrate 0.8s var(--ease-soft) both;
     background: var(--color-surface-hover);
 }
 
 .connection-connect.failed {
-    animation: connect-let-down 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: connect-let-down 0.34s var(--ease-bounce) both;
     border-color: var(--color-error);
     background: var(--color-error-bg);
     color: var(--color-error);
@@ -219,63 +219,8 @@
     color: var(--color-error);
 }
 
-@keyframes connect-celebrate {
-    0% {
-        transform: translateY(0) scale(1);
-        box-shadow: 2px 3px 0 var(--color-shadow);
-    }
 
-    30% {
-        transform: translateY(-6px) rotate(-2deg) scale(1.06);
-        box-shadow: 3px 8px 0 var(--color-shadow);
-    }
 
-    60% {
-        transform: translateY(1px) rotate(1deg) scale(0.99);
-        box-shadow: 1px 1px 0 var(--color-shadow);
-    }
-
-    100% {
-        transform: translateY(0) scale(1);
-        box-shadow: 2px 3px 0 var(--color-shadow);
-    }
-}
-
-@keyframes connect-let-down {
-    0% {
-        transform: translateY(0) scale(1);
-    }
-
-    38% {
-        transform: translateY(2px) rotate(-0.45deg) scale(0.99);
-    }
-
-    68% {
-        transform: translateY(-1px) rotate(0.35deg) scale(1.005);
-    }
-
-    100% {
-        transform: translateY(0) scale(1);
-    }
-}
-
-@keyframes wifi-pulse {
-    0% {
-        opacity: 0;
-        transform: translateY(-50%) scale(0.4);
-    }
-
-    20%,
-    70% {
-        opacity: 1;
-        transform: translateY(-50%) scale(1);
-    }
-
-    100% {
-        opacity: 0;
-        transform: translateY(-50%) scale(1);
-    }
-}
 
 .onboarding-panel {
     --onboarding-panel-top: clamp(10.8rem, 31vh, 17rem);
@@ -297,7 +242,7 @@
     opacity: 0;
     pointer-events: none;
     transform: translate(-50%, 1.4rem) scale(0.96);
-    transition: opacity 0.45s ease-out, transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), filter 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity 0.45s ease-out, transform 0.65s var(--ease-soft), filter 0.65s var(--ease-soft);
 }
 
 html.onboarding-active .onboarding-panel {
@@ -378,7 +323,7 @@ html.onboarding-active .onboarding-panel {
     font-weight: 900;
     cursor: pointer;
     box-shadow: 2px 3px 0 var(--color-shadow);
-    transition: transform 0.18s ease-out, background 0.18s ease-out, box-shadow 0.18s ease-out;
+    transition: transform var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast);
 }
 
 .onboarding-skip:hover {

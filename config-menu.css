@@ -23,7 +23,7 @@
     border-radius: 0.6rem;
     font-size: 1.4rem;
     line-height: 1;
-    transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.45s var(--ease-soft), background 0.75s var(--ease-soft), color 0.75s var(--ease-soft), border-color 0.75s var(--ease-soft), box-shadow 0.75s var(--ease-soft);
 }
 
 .config-btn:hover,
@@ -48,7 +48,7 @@
     pointer-events: none;
     transform: translate(0, 0) rotate(0deg) scale(0.25);
     transform-origin: top right;
-    transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease-out, background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.7s var(--ease-soft), opacity 0.35s ease-out, background 0.75s var(--ease-soft), color 0.75s var(--ease-soft), border-color 0.75s var(--ease-soft), box-shadow 0.75s var(--ease-soft);
 }
 
 .config-menu.open .config-btn {
@@ -103,7 +103,7 @@
     opacity: 0;
     pointer-events: none;
     transform: translateY(-0.6rem) scale(0.96);
-    transition: opacity 0.2s ease-out, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), background 0.75s cubic-bezier(0.16, 1, 0.3, 1), color 0.75s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.75s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity 0.2s ease-out, transform 0.28s var(--ease-soft), background 0.75s var(--ease-soft), color 0.75s var(--ease-soft), border-color 0.75s var(--ease-soft), box-shadow 0.75s var(--ease-soft);
 }
 
 .theme-panel.open,
@@ -147,7 +147,7 @@
     font-weight: 900;
     text-decoration: underline;
     cursor: pointer;
-    transition: transform 0.18s ease-out, color 0.18s ease-out;
+    transition: transform var(--motion-fast), color var(--motion-fast);
 }
 
 .theme-close:hover,

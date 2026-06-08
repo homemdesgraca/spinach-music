@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Doto:wght@100..900&family=PT+Mono&display=swap');
+
+:root {
+    --font-main: 'Doto', monospace;
+    --font-secondary: 'PT Mono', monospace;
+    --color-page-bg: #74c69d;
+    --color-text: green;
+    --color-shadow: #0b5d1e;
+    --color-surface: #95d5b2;
+    --color-surface-hover: #b7e4c7;
+    --color-input-bg: #d8f3dc;
+    --color-on-input: green;
+    --color-ok: #1b5e20;
+    --color-error: #7a1f1f;
+    --color-error-bg: #f3b5b5;
+    --color-disc-line: rgba(11, 93, 30, 0.22);
+    --cover-bg: none;
+    --cover-bg-opacity: 0;
+    --cover-bg-scale: 1.025;
+    --cover-bg-saturation: 1;
+    --cover-bg-brightness: 1;
+    --cover-readable-overlay: transparent;
+    --title-ink: color-mix(in srgb, var(--color-surface-hover) 56%, #f6ffe8);
+    --title-edge: color-mix(in srgb, var(--color-shadow) 76%, #073b16);
+    --title-shadow: rgba(0, 38, 12, 0.42);
+    --title-soft-shadow: rgba(245, 255, 238, 0.2);
+}
+
+:root {
+    --radius-panel: 1rem;
+    --radius-card: 0.7rem;
+    --radius-pill: 999px;
+    --shadow-button: 2px 3px 0 var(--color-shadow);
+    --shadow-button-hover: 2px 5px 0 var(--color-shadow);
+    --shadow-button-pressed: 1px 1px 0 var(--color-shadow);
+    --shadow-panel: 3px 4px 0 var(--color-shadow);
+}

@@ -938,13 +938,14 @@ const applyDeckTransform = () => {
             ], {
                 duration: 760 + (Math.min(slotIndex, 6) * 54),
                 easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-                fill: 'both',
+                fill: 'none',
             });
             dropAnimation.onfinish = () => {
                 if (activeCard.dataset.dropRun === String(deckDropRun)) {
                     activeCard.style.opacity = '1';
                     activeCard.style.transform = finalTransform;
                 }
+                dropAnimation.cancel();
             };
         }
     });
