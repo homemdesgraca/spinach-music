@@ -74,7 +74,7 @@
         <link rel="stylesheet" href="css/tokens.css?v=2">
         <link rel="stylesheet" href="css/motion.css?v=1">
         <link rel="stylesheet" href="css/components.css?v=3">
-        <link rel="stylesheet" href="styles.css?v=35">
+        <link rel="stylesheet" href="styles.css?v=36">
         <link rel="stylesheet" href="config-menu.css?v=7">
         <link rel="stylesheet" href="connections-panel.css?v=8">
         <link rel="stylesheet" href="css/onboarding.css?v=1">
@@ -102,23 +102,23 @@
                 <p>hi! welcome to spinach, your eye-candy player :p</p>
                 <p>input your navidrome credentials below (or skip it if you're a bad person...)</p>
             </div>
-            <div class="connection-card onboarding-card">
+            <form class="connection-card onboarding-card" autocomplete="on">
                 <h2>navidrome / subsonic</h2>
                 <label>
                     server url
-                    <input id="onboarding-navidrome-url" type="text" value="http://127.0.0.1:4533/">
+                    <input id="onboarding-navidrome-url" name="onboarding-navidrome-url" type="text" autocomplete="url" value="http://127.0.0.1:4533/">
                 </label>
                 <label>
                     username
-                    <input id="onboarding-navidrome-user" type="text">
+                    <input id="onboarding-navidrome-user" name="onboarding-navidrome-user" type="text" autocomplete="username">
                 </label>
                 <label>
                     password
-                    <input id="onboarding-navidrome-pass" type="password">
+                    <input id="onboarding-navidrome-pass" name="onboarding-navidrome-pass" type="password" autocomplete="current-password">
                 </label>
                 <button class="connection-connect onboarding-connect" id="onboarding-navidrome-connect" type="button">connect</button>
                 <p class="connection-status navidrome-status" id="onboarding-navidrome-status" aria-live="polite"></p>
-            </div>
+            </form>
             <button class="onboarding-skip" type="button">skip</button>
         </section>
 
@@ -178,23 +178,23 @@
                     <span></span>
                 </span>
             </h2>
-            <div class="connection-card">
-                <h3>Navidrome / Subsonic</h3>
+            <form class="connection-card" autocomplete="on">
+                <h3>navidrome / subsonic</h3>
                 <label>
                     server url
-                    <input id="navidrome-url" type="text" placeholder="http://127.0.0.1:4533/" value="http://127.0.0.1:4533/">
+                    <input id="navidrome-url" name="navidrome-url" type="text" autocomplete="url" placeholder="http://127.0.0.1:4533/" value="http://127.0.0.1:4533/">
                 </label>
                 <label>
                     username
-                    <input id="navidrome-user" type="text" placeholder="your username">
+                    <input id="navidrome-user" name="navidrome-user" type="text" autocomplete="username" placeholder="your username">
                 </label>
                 <label>
                     password
-                    <input id="navidrome-pass" type="password" placeholder="your password">
+                    <input id="navidrome-pass" name="navidrome-pass" type="password" autocomplete="current-password" placeholder="your password">
                 </label>
                 <button class="connection-connect" id="navidrome-connect" type="button">connect</button>
                 <p class="connection-status navidrome-status" id="navidrome-status" aria-live="polite"></p>
-            </div>
+            </form>
         </section>
 
         <div class="top-section">
@@ -213,9 +213,9 @@
             <div class="library-deck-track" data-library-deck-track></div>
         </section>
 
-        <aside class="lyrics-drawer" aria-hidden="true">
+        <aside class="lyrics-drawer">
             <button class="lyrics-tab" type="button" aria-expanded="false" aria-label="open lyrics">lyrics</button>
-            <div class="lyrics-card">
+            <div class="lyrics-card" aria-hidden="true" inert>
                 <button class="lyrics-close" type="button">close</button>
                 <p class="lyrics-kicker">current song</p>
                 <h2>lyrics</h2>
@@ -239,9 +239,7 @@
                     <span id="now-playing-artist"></span>
                 </span>
             </span>
-            <span class="now-playing-disc" aria-hidden="true">
-                <span class="now-playing-face">:&lt;</span>
-            </span>
+            <span class="now-playing-disc" aria-hidden="true"></span>
             <div class="player-controls" aria-label="Player controls">
                 <button class="player-control" type="button" data-mpris-action="previous">back</button>
                 <button class="player-control" type="button" data-mpris-action="toggle" aria-pressed="false">play</button>
@@ -258,10 +256,10 @@
 
         <script type="module" src="menu.js?v=7"></script>
         <script type="module" src="sound.js?v=2"></script>
-        <script type="module" src="navidrome.js?v=15"></script>
+        <script type="module" src="navidrome.js?v=16"></script>
         <script type="module" src="player.js?v=5"></script>
         <script type="module" src="library-tabs.js?v=58"></script>
-        <script type="module" src="now-playing.js?v=66"></script>
+        <script type="module" src="now-playing.js?v=67"></script>
     </body>
 
 </html>

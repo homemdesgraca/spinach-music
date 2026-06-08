@@ -13,18 +13,21 @@ import {
     validateNavidromeConnection,
 } from './js/services/navidrome-client.js';
 
+const navidromeForm = document.querySelector('.connections-panel .connection-card');
 const navidromeUrl = document.querySelector('#navidrome-url');
 const navidromeUser = document.querySelector('#navidrome-user');
 const navidromePass = document.querySelector('#navidrome-pass');
 const navidromeConnect = document.querySelector('#navidrome-connect');
 const navidromeStatus = document.querySelector('#navidrome-status');
 const onboardingPanel = document.querySelector('.onboarding-panel');
+const onboardingForm = document.querySelector('.onboarding-panel .connection-card');
 const onboardingUrl = document.querySelector('#onboarding-navidrome-url');
 const onboardingUser = document.querySelector('#onboarding-navidrome-user');
 const onboardingPass = document.querySelector('#onboarding-navidrome-pass');
 const onboardingConnect = document.querySelector('#onboarding-navidrome-connect');
 const onboardingStatus = document.querySelector('#onboarding-navidrome-status');
 const onboardingSkip = document.querySelector('.onboarding-skip');
+const configButton = document.querySelector('.config-btn');
 
 const ONBOARDING_SKIPPED_KEY = STORAGE_KEYS.ONBOARDING_SKIPPED;
 const DEFAULT_NAVIDROME_URL = DEFAULTS.NAVIDROME_URL;
@@ -129,15 +132,22 @@ const hasCompleteConnection = hasCompleteNavidromeConnection;
 const setOnboardingActive = (active) => {
     document.documentElement.classList.toggle('onboarding-active', active);
     document.body.classList.toggle('onboarding-active', active);
-    onboardingPanel?.setAttribute('aria-hidden', String(!active));
-
     if (active) {
         onboardingPanel?.removeAttribute('inert');
+        onboardingPanel?.setAttribute('aria-hidden', 'false');
         window.setTimeout(() => onboardingUrl?.focus({ preventScroll: true }), 280);
         return;
     }
 
+    if (onboardingPanel?.contains(document.activeElement)) {
+        configButton?.focus({ preventScroll: true });
+        if (onboardingPanel.contains(document.activeElement)) {
+            document.activeElement?.blur?.();
+        }
+    }
+
     onboardingPanel?.setAttribute('inert', '');
+    onboardingPanel?.setAttribute('aria-hidden', 'true');
 };
 
 const refreshOnboardingState = () => {
@@ -223,7 +233,15 @@ if (hasCompleteConnection(savedConnection)) {
 refreshOnboardingState();
 
 navidromeConnect.addEventListener('click', () => connectNavidrome('panel'));
+navidromeForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    connectNavidrome('panel');
+});
 onboardingConnect?.addEventListener('click', () => connectNavidrome('onboarding'));
+onboardingForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    connectNavidrome('onboarding');
+});
 onboardingSkip?.addEventListener('click', () => {
     setStorageBoolean(ONBOARDING_SKIPPED_KEY, true);
     setOnboardingActive(false);
@@ -232,6 +250,7 @@ onboardingSkip?.addEventListener('click', () => {
 [onboardingUrl, onboardingUser, onboardingPass].forEach((input) => {
     input?.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
+            event.preventDefault();
             connectNavidrome('onboarding');
         }
     });

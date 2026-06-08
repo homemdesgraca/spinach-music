@@ -300,16 +300,25 @@ export const createLyricsController = ({
     };
 
     const open = () => {
+        lyricsCard?.removeAttribute('inert');
+        lyricsCard?.setAttribute('aria-hidden', 'false');
         lyricsDrawer?.classList.add('open');
-        lyricsDrawer?.setAttribute('aria-hidden', 'false');
         lyricsTab?.setAttribute('aria-expanded', 'true');
+        lyricsTab?.setAttribute('tabindex', '-1');
+        window.setTimeout(() => lyricsClose?.focus({ preventScroll: true }), 120);
         fetchLyrics();
     };
 
     const close = () => {
+        if (lyricsCard?.contains(document.activeElement)) {
+            lyricsTab?.focus({ preventScroll: true });
+        }
+
         lyricsDrawer?.classList.remove('open');
-        lyricsDrawer?.setAttribute('aria-hidden', 'true');
+        lyricsCard?.setAttribute('inert', '');
+        lyricsCard?.setAttribute('aria-hidden', 'true');
         lyricsTab?.setAttribute('aria-expanded', 'false');
+        lyricsTab?.removeAttribute('tabindex');
     };
 
     const bindEvents = () => {
