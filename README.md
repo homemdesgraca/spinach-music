@@ -49,4 +49,4 @@ http://127.0.0.1:5500
 - the app is meant to feel very tactile (because that tickles my brain and i like it)
 - this repo is VERY WIP. also, i didn't design anything taking into account windows stuff, so yeah, that might be hit or miss.
 - yes, the background cover being HQ is a design choice
-- even though this project was assisted by [pi](https://pi.dev/) and [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B), **ALL** of the design choices, UI design, audio backend and much more was entirely by me. i just hate fighting with CSS.
+- even though this project was assisted by [pi](https://pi.dev/) and [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)/[Gemma4-12B](https://huggingface.co/google/gemma-4-12B-it), **ALL** of the design choices, UI design, audio backend and much more was entirely by me. i just hate fighting with CSS.

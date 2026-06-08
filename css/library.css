@@ -381,7 +381,8 @@ body.library-mode .library-deck {
     white-space: normal;
 }
 
-.library-card-count {
+.library-card-count,
+.library-card-duration {
     position: absolute;
     right: 0.82rem;
     bottom: 0.82rem;
@@ -397,6 +398,12 @@ body.library-mode .library-deck {
     box-shadow: 1px 2px 0 var(--card-shadow, var(--color-shadow));
 }
 
+.library-card-duration {
+    background: color-mix(in srgb, var(--card-surface, var(--color-surface)) 86%, var(--color-input-bg));
+    letter-spacing: 0.02em;
+}
+
+.library-card.is-album-card .library-card-count,
 body.album-tracks-mode .library-card.is-track-card .library-card-count {
     left: 0.82rem;
     right: auto;
@@ -407,6 +414,17 @@ body.album-tracks-mode .library-card.is-track-card .library-card-count {
     background: color-mix(in srgb, var(--card-surface, var(--color-surface)) 86%, var(--color-input-bg));
     font-size: 1.02rem;
     letter-spacing: 0.02em;
+    box-shadow: 2px 3px 0 var(--card-shadow, var(--color-shadow));
+}
+
+.library-card.is-album-card .library-card-duration,
+body.album-tracks-mode .library-card.is-track-card .library-card-duration {
+    right: 0.82rem;
+    left: auto;
+    bottom: 0.82rem;
+    z-index: 4;
+    padding: 0.38rem 0.62rem;
+    font-size: 0.86rem;
     box-shadow: 2px 3px 0 var(--card-shadow, var(--color-shadow));
 }
 
@@ -427,11 +445,18 @@ body.album-tracks-mode .library-card.is-track-card .library-card-count {
     }
 
     .library-card-subtitle,
-    .library-card-count {
+    .library-card-count,
+    .library-card-duration {
         font-size: 0.66rem;
     }
 
+    .library-card.is-album-card .library-card-count,
     body.album-tracks-mode .library-card.is-track-card .library-card-count {
         font-size: 0.92rem;
+    }
+
+    .library-card.is-album-card .library-card-duration,
+    body.album-tracks-mode .library-card.is-track-card .library-card-duration {
+        font-size: 0.76rem;
     }
 }

@@ -184,12 +184,30 @@ const formatTrackDuration = (seconds) => {
     const value = Number(seconds);
 
     if (!Number.isFinite(value) || value <= 0) {
-        return 'track';
+        return '';
     }
 
     const minutes = Math.floor(value / 60);
     const remaining = Math.floor(value % 60);
     return `${minutes}:${String(remaining).padStart(2, '0')}`;
+};
+
+const formatAlbumDuration = (seconds) => {
+    const value = Number(seconds);
+
+    if (!Number.isFinite(value) || value <= 0) {
+        return '';
+    }
+
+    const totalMinutes = Math.max(1, Math.round(value / 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (!hours) {
+        return `${totalMinutes}m`;
+    }
+
+    return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
 };
 
 const getStatusCard = (mode) => {
@@ -648,11 +666,12 @@ const fetchLibraryMode = async (mode, force = false, context = null) => {
             ? (payload.tracks || []).map((track, index) => ({
                 ...track,
                 title: track.title || `track ${index + 1}`,
-                subtitle: [track.artist || requestContext?.artist || '', track.album || requestContext?.title || '', formatTrackDuration(track.duration)]
+                subtitle: [track.artist || requestContext?.artist || '', track.album || requestContext?.title || '']
                     .filter(Boolean)
                     .join(' · '),
                 tracks: 1,
                 countLabel: `#${track.track || index + 1}`,
+                durationLabel: formatTrackDuration(track.duration),
                 type: 'song',
                 coverArt: useAlbumCoverForTracks ? (albumCoverSource.coverArt || '') : track.coverArt,
                 imageUrl: useAlbumCoverForTracks ? (albumCoverSource.imageUrl || '') : track.imageUrl,
@@ -948,21 +967,25 @@ const animateSubtitleIn = () => {
 };
 
 const createDeckCard = (item, index = 0) => {
-    const { title, subtitle = '', tracks = 0, colors = CARD_COLORS[0], type = 'album', countLabel = '', coverKey = '', coverUrl = '', palette = null, isStatus = false } = item;
+    const { title, subtitle = '', tracks = 0, duration = null, colors = CARD_COLORS[0], type = 'album', countLabel = '', durationLabel = '', coverKey = '', coverUrl = '', palette = null, isStatus = false } = item;
     const card = document.createElement('article');
     const titleElement = document.createElement('h3');
     const titleText = document.createElement('span');
     const coverElement = document.createElement('div');
     const countElement = document.createElement('span');
+    const durationElement = document.createElement('span');
     const tilts = ['-1deg', '1.2deg', '-0.35deg', '0.75deg'];
     const tilt = isStatus ? '-0.35deg' : tilts[index % tilts.length];
     const count = Number(tracks) || 0;
     const defaultCountLabel = type === 'artist'
         ? `${count} ${count === 1 ? 'album' : 'albums'}`
         : type === 'song' ? 'play' : `${count} ${count === 1 ? 'track' : 'tracks'}`;
+    const defaultDurationLabel = type === 'album' ? formatAlbumDuration(duration) : '';
+    const cardDurationLabel = durationLabel || defaultDurationLabel;
 
     card.className = 'library-card';
     card.classList.toggle('is-status-card', Boolean(isStatus));
+    card.classList.toggle('is-album-card', type === 'album' && !isStatus);
     card.classList.toggle('is-track-card', type === 'song');
     card.tabIndex = isStatus ? -1 : 0;
     if (!isStatus) {
@@ -1011,6 +1034,12 @@ const createDeckCard = (item, index = 0) => {
     countElement.className = 'library-card-count';
     countElement.textContent = countLabel || defaultCountLabel;
     card.append(countElement);
+
+    if (cardDurationLabel) {
+        durationElement.className = 'library-card-duration';
+        durationElement.textContent = cardDurationLabel;
+        card.append(durationElement);
+    }
 
     return card;
 };

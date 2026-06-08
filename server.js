@@ -314,6 +314,7 @@ const normalizeLibraryItem = (item, mode, index) => {
     const title = firstLine(item?.name || item?.title || item?.album || 'untitled');
     const artist = firstLine(item?.artist || item?.albumArtist || '');
     const tracks = Number(item?.songCount ?? item?.trackCount ?? item?.childCount ?? item?.albumCount ?? 0);
+    const duration = Number(item?.duration);
     const coverArt = firstLine(item?.coverArt || '');
     const imageUrl = firstLine(item?.artistImageUrl || item?.imageUrl || '');
 
@@ -322,6 +323,7 @@ const normalizeLibraryItem = (item, mode, index) => {
         title,
         subtitle: mode === 'albums' ? artist : '',
         tracks: Number.isFinite(tracks) ? tracks : 0,
+        duration: Number.isFinite(duration) ? duration : null,
         coverArt,
         imageUrl,
         type: mode === 'albums' ? 'album' : 'artist',
