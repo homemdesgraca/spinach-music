@@ -7,6 +7,7 @@
     flex-direction: column;
     justify-content: left;
     align-items: flex-start;
+    width: min(100vw, 64rem);
     pointer-events: none;
     transform: translate(0, 0);
     transition: top 1.05s var(--ease-soft), left 1.05s var(--ease-soft), transform 1.05s var(--ease-soft);
@@ -23,6 +24,12 @@
     -webkit-text-stroke-color: var(--title-edge);
     text-shadow: 1px 1px 0 var(--title-shadow);
     transition: color 0.85s var(--ease-soft), -webkit-text-stroke-color 0.85s var(--ease-soft), text-shadow 0.85s var(--ease-soft), margin 1.05s var(--ease-soft), font-size 1.05s var(--ease-soft);
+}
+
+.top-section .dodge-letter {
+    display: inline-block;
+    translate: var(--dodge-letter-x, 0px) var(--dodge-letter-y, 0px);
+    will-change: translate;
 }
 
 .top-section .title-txt,
