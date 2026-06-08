@@ -1,3 +1,7 @@
+import { ENDPOINTS, EVENT_NAMES, STORAGE_KEYS } from './js/core/constants.js';
+import { listenSpinachEvent } from './js/core/events.js';
+import { getStorageBoolean, loadNavidromeConnection } from './js/core/storage.js';
+
 const libraryTabs = document.querySelector('.library-tabs');
 const libraryTabButtons = document.querySelectorAll('.library-tab');
 const libraryDeck = document.querySelector('.library-deck');
@@ -8,12 +12,11 @@ const libraryProgressText = libraryProgressTooltip?.querySelector('span');
 const subtitleText = document.querySelector('.subtitle-txt');
 const nowPlayingBar = document.querySelector('.now-playing-bar');
 
-const NAVIDROME_STORAGE_KEY = 'spinachMusic.navidromeConnection';
-const TRACK_COVER_STORAGE_KEY = 'spinachMusic.fetchTrackCovers';
-const LIBRARY_ENDPOINT = '/navidrome/library';
-const TRACKS_ENDPOINT = '/navidrome/tracks';
-const COVER_ENDPOINT = '/navidrome/cover';
-const CACHE_COVER_ENDPOINT = '/navidrome/cache-cover';
+const TRACK_COVER_STORAGE_KEY = STORAGE_KEYS.FETCH_TRACK_COVERS;
+const LIBRARY_ENDPOINT = ENDPOINTS.NAVIDROME_LIBRARY;
+const TRACKS_ENDPOINT = ENDPOINTS.NAVIDROME_TRACKS;
+const COVER_ENDPOINT = ENDPOINTS.NAVIDROME_COVER;
+const CACHE_COVER_ENDPOINT = ENDPOINTS.NAVIDROME_CACHE_COVER;
 const CARD_COLORS = [
     ['#d8f3dc', '#40916c'],
     ['#b7e4c7', '#2d6a4f'],
@@ -113,15 +116,7 @@ const syncViewportVars = () => {
 
 syncViewportVars();
 
-const loadNavidromeConnection = () => {
-    try {
-        return JSON.parse(localStorage.getItem(NAVIDROME_STORAGE_KEY));
-    } catch {
-        return null;
-    }
-};
-
-const shouldFetchIndividualTrackCovers = () => localStorage.getItem(TRACK_COVER_STORAGE_KEY) === 'true';
+const shouldFetchIndividualTrackCovers = () => getStorageBoolean(TRACK_COVER_STORAGE_KEY);
 
 const hashText = (value) => String(value || '').split('').reduce((hash, char) => (
     ((hash << 5) - hash) + char.charCodeAt(0)
@@ -1674,7 +1669,7 @@ libraryDeckTrack?.addEventListener('click', (event) => {
 
 libraryBackButton?.addEventListener('click', backToPreviousLibraryView);
 
-window.addEventListener('spinach:advanced-settings-changed', (event) => {
+listenSpinachEvent(EVENT_NAMES.ADVANCED_SETTINGS_CHANGED, (event) => {
     if (event.detail?.setting !== 'trackCovers' || deckMode !== 'albumTracks' || !albumTracksContext?.id) {
         return;
     }
@@ -1738,7 +1733,7 @@ const warmLibraryCache = () => {
     fetchLibraryMode('albums');
 };
 
-window.addEventListener('spinach:cache-cleared', (event) => {
+listenSpinachEvent(EVENT_NAMES.CACHE_CLEARED, (event) => {
     const cache = event.detail?.cache;
     if (cache !== 'covers' && cache !== 'palettes') {
         return;
@@ -1763,14 +1758,22 @@ window.addEventListener('spinach:cache-cleared', (event) => {
     }
 });
 
-window.addEventListener('spinach:navidrome-connection-change', () => {
+listenSpinachEvent(EVENT_NAMES.NAVIDROME_CONNECTION_CHANGE, (event) => {
+    const connected = event.detail?.connected === true;
     resetLibraryDeckData();
+
     if (activeLibraryTab?.dataset.libraryTab) {
-        fetchLibraryMode(activeLibraryTab.dataset.libraryTab, true);
+        const mode = activeLibraryTab.dataset.libraryTab;
+        renderLibraryDeck(mode, { drop: true });
+        if (connected) {
+            fetchLibraryMode(mode, true);
+        }
         return;
     }
 
-    warmLibraryCache();
+    if (connected) {
+        warmLibraryCache();
+    }
 });
 
 window.setTimeout(warmLibraryCache, 650);

@@ -1,3 +1,13 @@
+import { DEFAULTS, EVENT_NAMES, STORAGE_KEYS, SUBSONIC_CLIENT } from './js/core/constants.js';
+import { emitSpinachEvent } from './js/core/events.js';
+import {
+    getStorageBoolean,
+    loadNavidromeConnection,
+    removeStorageValue,
+    saveNavidromeConnection,
+    setStorageBoolean,
+} from './js/core/storage.js';
+
 const navidromeUrl = document.querySelector('#navidrome-url');
 const navidromeUser = document.querySelector('#navidrome-user');
 const navidromePass = document.querySelector('#navidrome-pass');
@@ -11,11 +21,11 @@ const onboardingConnect = document.querySelector('#onboarding-navidrome-connect'
 const onboardingStatus = document.querySelector('#onboarding-navidrome-status');
 const onboardingSkip = document.querySelector('.onboarding-skip');
 
-const STORAGE_KEY = 'spinachMusic.navidromeConnection';
-const ONBOARDING_SKIPPED_KEY = 'spinachMusic.onboardingSkipped';
-const DEFAULT_NAVIDROME_URL = 'http://127.0.0.1:4533/';
-const SUBSONIC_VERSION = '1.16.1';
-const CLIENT_NAME = 'spinach-music';
+const STORAGE_KEY = STORAGE_KEYS.NAVIDROME_CONNECTION;
+const ONBOARDING_SKIPPED_KEY = STORAGE_KEYS.ONBOARDING_SKIPPED;
+const DEFAULT_NAVIDROME_URL = DEFAULTS.NAVIDROME_URL;
+const SUBSONIC_VERSION = SUBSONIC_CLIENT.VERSION;
+const CLIENT_NAME = SUBSONIC_CLIENT.NAME;
 
 const setStatusText = (statusElement, message, type = '') => {
     if (!statusElement) {
@@ -123,17 +133,9 @@ const fetchSubsonic = async (url, endpoint, credentials, params) => {
     return subsonic;
 };
 
-const saveConnection = (connection) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(connection));
-};
+const saveConnection = saveNavidromeConnection;
 
-const loadConnection = () => {
-    try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY));
-    } catch {
-        return null;
-    }
-};
+const loadConnection = loadNavidromeConnection;
 
 const fillConnectionForm = (connection) => {
     const url = connection?.url || DEFAULT_NAVIDROME_URL;
@@ -156,7 +158,9 @@ const fillConnectionForm = (connection) => {
 };
 
 const notifyConnectionChange = () => {
-    window.dispatchEvent(new CustomEvent('spinach:navidrome-connection-change'));
+    emitSpinachEvent(EVENT_NAMES.NAVIDROME_CONNECTION_CHANGE, {
+        connected: hasCompleteConnection(loadConnection()),
+    });
 };
 
 const hasCompleteConnection = (connection) => Boolean(connection?.url && connection?.username && connection?.password);
@@ -176,7 +180,7 @@ const setOnboardingActive = (active) => {
 };
 
 const refreshOnboardingState = () => {
-    const skipped = localStorage.getItem(ONBOARDING_SKIPPED_KEY) === 'true';
+    const skipped = getStorageBoolean(ONBOARDING_SKIPPED_KEY);
     setOnboardingActive(!hasCompleteConnection(loadConnection()) && !skipped);
 };
 
@@ -191,8 +195,8 @@ const readConnectionForm = (source = 'panel') => {
 };
 
 const disconnectNavidrome = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(ONBOARDING_SKIPPED_KEY);
+    removeStorageValue(STORAGE_KEY);
+    removeStorageValue(ONBOARDING_SKIPPED_KEY);
     isNavidromeConnected = false;
     fillConnectionForm(null);
     setAllConnectButtonMoods();
@@ -227,7 +231,7 @@ const connectNavidrome = async (source = 'panel') => {
         activeStatus('testing connection...');
         await fetchSubsonic(connection.url, 'ping', connection);
         saveConnection(connection);
-        localStorage.removeItem(ONBOARDING_SKIPPED_KEY);
+        removeStorageValue(ONBOARDING_SKIPPED_KEY);
         fillConnectionForm(connection);
         isNavidromeConnected = true;
         setAllNavidromeButtonText(true);
@@ -260,7 +264,7 @@ refreshOnboardingState();
 navidromeConnect.addEventListener('click', () => connectNavidrome('panel'));
 onboardingConnect?.addEventListener('click', () => connectNavidrome('onboarding'));
 onboardingSkip?.addEventListener('click', () => {
-    localStorage.setItem(ONBOARDING_SKIPPED_KEY, 'true');
+    setStorageBoolean(ONBOARDING_SKIPPED_KEY, true);
     setOnboardingActive(false);
 });
 

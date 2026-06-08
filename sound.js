@@ -1,12 +1,8 @@
-const PLAYER_SOURCE_STORAGE_KEY = 'spinachMusic.playerSource';
-const DEFAULT_PLAYER_SOURCE = 'navidrome';
-const sourceButtons = document.querySelectorAll('[data-player-source]');
+import { EVENT_NAMES } from './js/core/constants.js';
+import { emitSpinachEvent, listenSpinachEvent } from './js/core/events.js';
+import { getPlayerSource, setPlayerSource as savePlayerSource } from './js/core/storage.js';
 
-const getPlayerSource = () => (
-    localStorage.getItem(PLAYER_SOURCE_STORAGE_KEY) === 'mpris'
-        ? 'mpris'
-        : DEFAULT_PLAYER_SOURCE
-);
+const sourceButtons = document.querySelectorAll('[data-player-source]');
 
 const setSourceButtons = (source = getPlayerSource()) => {
     sourceButtons.forEach((button) => {
@@ -17,19 +13,16 @@ const setSourceButtons = (source = getPlayerSource()) => {
 };
 
 const setPlayerSource = (source) => {
-    const nextSource = source === 'mpris' ? 'mpris' : DEFAULT_PLAYER_SOURCE;
-    localStorage.setItem(PLAYER_SOURCE_STORAGE_KEY, nextSource);
+    const nextSource = savePlayerSource(source);
     setSourceButtons(nextSource);
-    window.dispatchEvent(new CustomEvent('spinach:player-source-change', {
-        detail: { source: nextSource },
-    }));
+    emitSpinachEvent(EVENT_NAMES.PLAYER_SOURCE_CHANGE, { source: nextSource });
 };
 
 sourceButtons.forEach((button) => {
     button.addEventListener('click', () => setPlayerSource(button.dataset.playerSource));
 });
 
-window.addEventListener('spinach:player-source-change', (event) => {
+listenSpinachEvent(EVENT_NAMES.PLAYER_SOURCE_CHANGE, (event) => {
     setSourceButtons(event.detail?.source || getPlayerSource());
 });
 

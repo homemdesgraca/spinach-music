@@ -3,14 +3,16 @@
     <head>
 
         <title>Spinach Music</title>
-        <script>
+        <script type="module">
+            import { STORAGE_KEYS } from './js/core/constants.js';
+            import { getStorageBoolean, getStorageJson, hasCompleteNavidromeConnection } from './js/core/storage.js';
+
             (() => {
                 try {
-                    const connection = JSON.parse(localStorage.getItem('spinachMusic.navidromeConnection') || 'null');
-                    const skippedOnboarding = localStorage.getItem('spinachMusic.onboardingSkipped') === 'true';
-                    const configured = connection?.url && connection?.username && connection?.password;
+                    const connection = getStorageJson(STORAGE_KEYS.NAVIDROME_CONNECTION, null);
+                    const skippedOnboarding = getStorageBoolean(STORAGE_KEYS.ONBOARDING_SKIPPED);
 
-                    if (!configured && !skippedOnboarding) {
+                    if (!hasCompleteNavidromeConnection(connection) && !skippedOnboarding) {
                         document.documentElement.classList.add('onboarding-active');
                     }
                 } catch {
@@ -20,7 +22,7 @@
 
             (() => {
                 try {
-                    const coverTheme = JSON.parse(localStorage.getItem('spinachMusic.coverBackground') || 'null');
+                    const coverTheme = getStorageJson(STORAGE_KEYS.COVER_BACKGROUND, null);
 
                     if (!coverTheme?.url) {
                         return;
@@ -253,12 +255,12 @@
             </section>
         </section>
 
-        <script src="menu.js?v=6"></script>
-        <script src="sound.js?v=1"></script>
-        <script src="navidrome.js?v=14"></script>
-        <script src="player.js?v=4"></script>
-        <script src="library-tabs.js?v=56"></script>
-        <script src="now-playing.js?v=65"></script>
+        <script type="module" src="menu.js?v=7"></script>
+        <script type="module" src="sound.js?v=2"></script>
+        <script type="module" src="navidrome.js?v=15"></script>
+        <script type="module" src="player.js?v=5"></script>
+        <script type="module" src="library-tabs.js?v=57"></script>
+        <script type="module" src="now-playing.js?v=66"></script>
     </body>
 
 </html>

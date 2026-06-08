@@ -1,16 +1,27 @@
+import { DEFAULTS, ENDPOINTS, EVENT_NAMES, PLAYER_SOURCES, STORAGE_KEYS } from './js/core/constants.js';
+import { emitSpinachEvent, listenSpinachEvent } from './js/core/events.js';
+import {
+    getPlayerSource,
+    getStorageJson,
+    getStorageValue,
+    hasCompleteNavidromeConnection,
+    loadNavidromeConnection,
+    setPlayerSource,
+    setStorageJson,
+    setStorageValue,
+} from './js/core/storage.js';
+
 (() => {
-const PLAYER_SOURCE_STORAGE_KEY = 'spinachMusic.playerSource';
-const NAVIDROME_STORAGE_KEY = 'spinachMusic.navidromeConnection';
-const VOLUME_STORAGE_KEY = 'spinachMusic.volume';
-const PLAYER_STATE_STORAGE_KEY = 'spinachMusic.navidromePlayerState';
-const TRACKS_ENDPOINT = '/navidrome/tracks';
-const STREAM_ENDPOINT = '/navidrome/stream';
-const COVER_ENDPOINT = '/navidrome/cover';
+const VOLUME_STORAGE_KEY = STORAGE_KEYS.VOLUME;
+const PLAYER_STATE_STORAGE_KEY = STORAGE_KEYS.NAVIDROME_PLAYER_STATE;
+const TRACKS_ENDPOINT = ENDPOINTS.NAVIDROME_TRACKS;
+const STREAM_ENDPOINT = ENDPOINTS.NAVIDROME_STREAM;
+const COVER_ENDPOINT = ENDPOINTS.NAVIDROME_COVER;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const loadStoredVolume = () => {
-    const stored = Number.parseFloat(localStorage.getItem(VOLUME_STORAGE_KEY));
-    return Number.isFinite(stored) ? clamp(stored, 0, 1) : 0.82;
+    const stored = Number.parseFloat(getStorageValue(VOLUME_STORAGE_KEY));
+    return Number.isFinite(stored) ? clamp(stored, 0, 1) : DEFAULTS.VOLUME;
 };
 
 const audio = new Audio();
@@ -24,31 +35,11 @@ let restoredPosition = 0;
 let lastStatus = 'stopped';
 let stateTimer = null;
 
-const getPlayerSource = () => (
-    localStorage.getItem(PLAYER_SOURCE_STORAGE_KEY) === 'mpris' ? 'mpris' : 'navidrome'
-);
+const isBrowserSource = () => getPlayerSource() !== PLAYER_SOURCES.MPRIS;
 
-const isBrowserSource = () => getPlayerSource() !== 'mpris';
+const hasConnection = hasCompleteNavidromeConnection;
 
-const loadNavidromeConnection = () => {
-    try {
-        return JSON.parse(localStorage.getItem(NAVIDROME_STORAGE_KEY) || 'null');
-    } catch {
-        return null;
-    }
-};
-
-const hasConnection = (connection = loadNavidromeConnection()) => Boolean(
-    connection?.url && connection?.username && connection?.password
-);
-
-const loadSavedPlayerState = () => {
-    try {
-        return JSON.parse(localStorage.getItem(PLAYER_STATE_STORAGE_KEY) || 'null');
-    } catch {
-        return null;
-    }
-};
+const loadSavedPlayerState = () => getStorageJson(PLAYER_STATE_STORAGE_KEY, null);
 
 const savePlayerState = () => {
     if (!currentTrack?.id) {
@@ -57,14 +48,14 @@ const savePlayerState = () => {
 
     const position = Number.isFinite(audio.currentTime) ? audio.currentTime : restoredPosition;
     const duration = Number.isFinite(audio.duration) ? audio.duration : currentTrack.duration;
-    localStorage.setItem(PLAYER_STATE_STORAGE_KEY, JSON.stringify({
+    setStorageJson(PLAYER_STATE_STORAGE_KEY, {
         queue,
         queueIndex,
         currentTrack,
         position: Math.max(0, position || 0),
         duration: Number.isFinite(duration) ? duration : currentTrack.duration || null,
         savedAt: Date.now(),
-    }));
+    });
 };
 
 const restorePlayerState = () => {
@@ -141,7 +132,7 @@ const getState = () => {
     const coverUrl = currentTrack ? buildCoverUrl(currentTrack) : '';
 
     return {
-        source: 'navidrome',
+        source: PLAYER_SOURCES.NAVIDROME,
         title: currentTrack?.title || '',
         artist: currentTrack?.artist || '',
         album: currentTrack?.album || '',
@@ -160,7 +151,7 @@ const emitState = () => {
     if (currentTrack?.id) {
         savePlayerState();
     }
-    window.dispatchEvent(new CustomEvent('spinach:player-state', { detail: state }));
+    emitSpinachEvent(EVENT_NAMES.PLAYER_STATE, state);
     return state;
 };
 
@@ -216,8 +207,8 @@ const stopStateTimer = () => {
 
 const playTrackAt = async (index) => {
     if (!isBrowserSource()) {
-        localStorage.setItem(PLAYER_SOURCE_STORAGE_KEY, 'navidrome');
-        window.dispatchEvent(new CustomEvent('spinach:player-source-change', { detail: { source: 'navidrome' } }));
+        setPlayerSource(PLAYER_SOURCES.NAVIDROME);
+        emitSpinachEvent(EVENT_NAMES.PLAYER_SOURCE_CHANGE, { source: PLAYER_SOURCES.NAVIDROME });
     }
 
     const nextTrack = queue[index];
@@ -269,9 +260,7 @@ const buildTracksUrl = (item) => {
 
 const playLibraryItem = async (item) => {
     if (!hasConnection()) {
-        window.dispatchEvent(new CustomEvent('spinach:player-message', {
-            detail: { message: 'connect navidrome first' },
-        }));
+        emitSpinachEvent(EVENT_NAMES.PLAYER_MESSAGE, { message: 'connect navidrome first' });
         emitState();
         return;
     }
@@ -286,9 +275,7 @@ const playLibraryItem = async (item) => {
         return;
     }
 
-    window.dispatchEvent(new CustomEvent('spinach:player-message', {
-        detail: { message: `loading ${item.type || 'library'}` },
-    }));
+    emitSpinachEvent(EVENT_NAMES.PLAYER_MESSAGE, { message: `loading ${item.type || 'library'}` });
 
     try {
         const response = await fetch(url.toString(), { cache: 'no-store' });
@@ -299,9 +286,7 @@ const playLibraryItem = async (item) => {
 
         await playQueue(payload.tracks || [], 0);
     } catch {
-        window.dispatchEvent(new CustomEvent('spinach:player-message', {
-            detail: { message: 'tracks unavailable' },
-        }));
+        emitSpinachEvent(EVENT_NAMES.PLAYER_MESSAGE, { message: 'tracks unavailable' });
         emitState();
     }
 };
@@ -311,7 +296,7 @@ const control = async (action, params = {}) => {
         const volume = Number.parseFloat(params.volume);
         if (Number.isFinite(volume)) {
             audio.volume = clamp(volume, 0, 1);
-            localStorage.setItem(VOLUME_STORAGE_KEY, String(audio.volume));
+            setStorageValue(VOLUME_STORAGE_KEY, String(audio.volume));
             emitState();
         }
         return;
@@ -408,8 +393,8 @@ if ('mediaSession' in navigator) {
     });
 }
 
-window.addEventListener('spinach:player-source-change', (event) => {
-    if (event.detail?.source === 'mpris') {
+listenSpinachEvent(EVENT_NAMES.PLAYER_SOURCE_CHANGE, (event) => {
+    if (event.detail?.source === PLAYER_SOURCES.MPRIS) {
         audio.pause();
         stopStateTimer();
         return;
@@ -419,7 +404,7 @@ window.addEventListener('spinach:player-source-change', (event) => {
     emitState();
 });
 
-window.addEventListener('spinach:navidrome-connection-change', () => {
+listenSpinachEvent(EVENT_NAMES.NAVIDROME_CONNECTION_CHANGE, () => {
     if (!hasConnection()) {
         audio.pause();
         currentTrack = null;

@@ -1,3 +1,17 @@
+import { DEFAULTS, ENDPOINTS, EVENT_NAMES, PLAYER_SOURCES, STORAGE_KEYS } from './js/core/constants.js';
+import { listenSpinachEvent } from './js/core/events.js';
+import {
+    getPlayerSource,
+    getStorageBoolean,
+    getStorageJson,
+    getStorageValue,
+    loadNavidromeConnection,
+    removeStorageValue,
+    setStorageBoolean,
+    setStorageJson,
+    setStorageValue,
+} from './js/core/storage.js';
+
 (() => {
 const nowPlayingBar = document.querySelector('.now-playing-bar');
 const coverThemeButton = document.querySelector('.cover-theme-button');
@@ -23,19 +37,15 @@ const lyricsCard = document.querySelector('.lyrics-card');
 const lyricsStatus = document.querySelector('#lyrics-status');
 const lyricsLines = document.querySelector('#lyrics-lines');
 
-const MPRIS_URL = '/mpris';
-const MPRIS_CONTROL_URL = '/mpris/control';
-const LYRICS_URL = '/lyrics';
+const MPRIS_URL = ENDPOINTS.MPRIS;
+const MPRIS_CONTROL_URL = ENDPOINTS.MPRIS_CONTROL;
+const LYRICS_URL = ENDPOINTS.LYRICS;
 const MPRIS_POLL_INTERVAL = 1000;
-const ADAPTIVE_COLORS_STORAGE_KEY = 'spinachMusic.adaptiveCoverColors';
-const COVER_BACKGROUND_STORAGE_KEY = 'spinachMusic.coverBackground';
-const HIGH_RES_BACKGROUND_STORAGE_KEY = 'spinachMusic.highResBackgroundCovers';
-const NAVIDROME_STORAGE_KEY = 'spinachMusic.navidromeConnection';
-const PLAYER_SOURCE_STORAGE_KEY = 'spinachMusic.playerSource';
-const VOLUME_STORAGE_KEY = 'spinachMusic.volume';
-const LAST_SONG_STORAGE_KEY = 'spinachMusic.lastSong';
-const SUBSONIC_VERSION = '1.16.1';
-const CLIENT_NAME = 'spinach-music';
+const ADAPTIVE_COLORS_STORAGE_KEY = STORAGE_KEYS.ADAPTIVE_COVER_COLORS;
+const COVER_BACKGROUND_STORAGE_KEY = STORAGE_KEYS.COVER_BACKGROUND;
+const HIGH_RES_BACKGROUND_STORAGE_KEY = STORAGE_KEYS.HIGH_RES_BACKGROUND_COVERS;
+const VOLUME_STORAGE_KEY = STORAGE_KEYS.VOLUME;
+const LAST_SONG_STORAGE_KEY = STORAGE_KEYS.LAST_SONG;
 
 const root = document.documentElement;
 const defaultTheme = {
@@ -51,7 +61,7 @@ const defaultTheme = {
 
 let isFetchingMpris = false;
 let playbackState = 'stopped';
-let playerSource = localStorage.getItem(PLAYER_SOURCE_STORAGE_KEY) === 'mpris' ? 'mpris' : 'navidrome';
+let playerSource = getPlayerSource();
 let renderedPlayerSource = '';
 let forceNextPlayerRender = true;
 let mprisPollTimer;
@@ -65,10 +75,14 @@ let titleMarqueeToken = 0;
 let isScrubbingProgress = false;
 let currentDuration = 0;
 let currentCoverUrl = '';
+let forceNextCoverLoad = false;
+let coverRetryRun = 0;
+let coverBackgroundDisabledByUser = false;
 let appliedCoverBackgroundUrl = '';
 let appliedCoverBackgroundIdentity = '';
 let coverBackgroundRun = 0;
 let currentSongData = null;
+let suppressSavedLastSong = false;
 const hintedCoverBackgrounds = new Map();
 let lastLyricsKey = '';
 let lyricsEntries = [];
@@ -81,17 +95,15 @@ let lyricsResizeAnimation;
 let lyricsRenderTimer;
 
 try {
-    const savedCoverBackground = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null');
+    const savedCoverBackground = getStorageJson(COVER_BACKGROUND_STORAGE_KEY, null);
     appliedCoverBackgroundUrl = savedCoverBackground?.url || '';
     appliedCoverBackgroundIdentity = savedCoverBackground?.identity || '';
 } catch {}
 
 let coverBackgroundEnabled = true;
-let adaptiveCoverColorsEnabled = localStorage.getItem(ADAPTIVE_COLORS_STORAGE_KEY) !== 'false';
+let adaptiveCoverColorsEnabled = getStorageValue(ADAPTIVE_COLORS_STORAGE_KEY, 'true') !== 'false';
 
-const getPlayerSource = () => localStorage.getItem(PLAYER_SOURCE_STORAGE_KEY) === 'mpris' ? 'mpris' : 'navidrome';
-
-const isMprisSource = () => playerSource === 'mpris';
+const isMprisSource = () => playerSource === PLAYER_SOURCES.MPRIS;
 
 const normalizePlaybackState = (state) => {
     const normalized = String(state || '').toLowerCase();
@@ -136,27 +148,6 @@ const parseSyncedLyrics = (lyrics = '') => lyrics
     })
     .filter((entry) => entry && entry.text);
 
-const loadNavidromeConnection = () => {
-    try {
-        return JSON.parse(localStorage.getItem(NAVIDROME_STORAGE_KEY) || 'null');
-    } catch {
-        return null;
-    }
-};
-
-const normalizeServerUrl = (rawUrl) => {
-    const normalized = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
-        ? rawUrl
-        : `https://${rawUrl}`;
-    const baseUrl = new URL(normalized);
-
-    if (!baseUrl.pathname.endsWith('/')) {
-        baseUrl.pathname += '/';
-    }
-
-    return baseUrl;
-};
-
 const fetchNavidromeLyrics = async (songData, signal) => {
     const connection = loadNavidromeConnection();
 
@@ -164,7 +155,7 @@ const fetchNavidromeLyrics = async (songData, signal) => {
         throw new Error('no navidrome connection');
     }
 
-    const url = new URL('/navidrome/lyrics', window.location.origin);
+    const url = new URL(ENDPOINTS.NAVIDROME_LYRICS, window.location.origin);
     url.searchParams.set('url', connection.url);
     url.searchParams.set('username', connection.username);
     url.searchParams.set('password', connection.password);
@@ -452,7 +443,7 @@ const getCoverBackgroundIdentity = (data = {}, coverUrl = '') => {
 };
 
 const getCoverBackgroundSize = () => (
-    localStorage.getItem(HIGH_RES_BACKGROUND_STORAGE_KEY) === 'true' ? 1600 : 1024
+    getStorageBoolean(HIGH_RES_BACKGROUND_STORAGE_KEY) ? 1600 : 1024
 );
 
 const getStableCoverBackgroundUrl = (coverUrl) => {
@@ -463,13 +454,13 @@ const getStableCoverBackgroundUrl = (coverUrl) => {
     try {
         const url = new URL(coverUrl, window.location.origin);
 
-        if (url.pathname === '/navidrome/cover' && url.searchParams.get('coverArt')) {
+        if (url.pathname === ENDPOINTS.NAVIDROME_COVER && url.searchParams.get('coverArt')) {
             url.searchParams.delete('id');
             url.searchParams.delete('art');
             url.searchParams.set('size', String(getCoverBackgroundSize()));
         }
 
-        return url.pathname === '/mpris/art'
+        return url.pathname === ENDPOINTS.MPRIS_ART
             ? `${url.pathname}${url.search}`
             : url.toString();
     } catch {
@@ -504,20 +495,14 @@ const preloadCoverBackgroundHint = (hint = {}) => {
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-const getSavedLastSong = () => {
-    try {
-        return JSON.parse(localStorage.getItem(LAST_SONG_STORAGE_KEY) || 'null');
-    } catch {
-        return null;
-    }
-};
+const getSavedLastSong = () => getStorageJson(LAST_SONG_STORAGE_KEY, null);
 const saveLastSong = (data = {}) => {
     if (!(data.title || data.artist || data.album)) {
         return;
     }
 
     const nextTrackId = data.trackId || [data.title, data.artist, data.album, data.duration].join('|');
-    localStorage.setItem(LAST_SONG_STORAGE_KEY, JSON.stringify({
+    setStorageJson(LAST_SONG_STORAGE_KEY, {
         source: data.source || playerSource,
         title: data.title || '',
         artist: data.artist || '',
@@ -527,11 +512,11 @@ const saveLastSong = (data = {}) => {
         duration: Number.isFinite(Number(data.duration)) ? Number(data.duration) : null,
         trackId: nextTrackId,
         savedAt: Date.now(),
-    }));
+    });
 };
 const getStoredVolume = () => {
-    const stored = Number.parseFloat(localStorage.getItem(VOLUME_STORAGE_KEY));
-    return Number.isFinite(stored) ? clamp(stored, 0, 1) : 0.82;
+    const stored = Number.parseFloat(getStorageValue(VOLUME_STORAGE_KEY));
+    return Number.isFinite(stored) ? clamp(stored, 0, 1) : DEFAULTS.VOLUME;
 };
 const setVolumeSlider = (volume, persist = false) => {
     if (!playerVolumeSlider || !Number.isFinite(volume)) {
@@ -548,7 +533,7 @@ const setVolumeSlider = (volume, persist = false) => {
     }
 
     if (persist) {
-        localStorage.setItem(VOLUME_STORAGE_KEY, String(safeVolume));
+        setStorageValue(VOLUME_STORAGE_KEY, String(safeVolume));
     }
 };
 const mixColor = (color, target, amount) => color.map((channel, index) => Math.round(channel + (target[index] - channel) * amount));
@@ -617,7 +602,9 @@ const resetCoverColors = () => {
     });
 };
 
-const resetCoverBackground = (disableBackground = false) => {
+const resetCoverBackground = (disableBackground = false, options = {}) => {
+    const shouldRemoveBackgroundImage = disableBackground || options.removeImage;
+
     if (disableBackground) {
         coverBackgroundEnabled = false;
     }
@@ -630,12 +617,12 @@ const resetCoverBackground = (disableBackground = false) => {
     root.style.setProperty('--cover-bg-opacity', '0');
     root.style.setProperty('--cover-bg-scale', '1.035');
     window.setTimeout(() => {
-        if (!coverBackgroundEnabled) {
+        if (shouldRemoveBackgroundImage) {
             root.style.removeProperty('--cover-bg');
         }
     }, 900);
     root.style.removeProperty('--cover-readable-overlay');
-    localStorage.removeItem(COVER_BACKGROUND_STORAGE_KEY);
+    removeStorageValue(COVER_BACKGROUND_STORAGE_KEY);
     resetCoverColors();
 };
 
@@ -756,13 +743,13 @@ const applyAdaptiveCoverColors = () => {
             root.style.setProperty(property, value);
         });
 
-        const cachedBackground = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null');
+        const cachedBackground = getStorageJson(COVER_BACKGROUND_STORAGE_KEY, null);
         if (cachedBackground?.url) {
-            localStorage.setItem(COVER_BACKGROUND_STORAGE_KEY, JSON.stringify({
+            setStorageJson(COVER_BACKGROUND_STORAGE_KEY, {
                 ...cachedBackground,
                 colors,
                 pageBg: colors['--color-page-bg'],
-            }));
+            });
         }
     } catch {
         resetCoverColors();
@@ -854,12 +841,12 @@ const startCoverBackgroundPreload = () => {
         root.classList.add('has-cover-theme');
         document.body.classList.add('has-cover-theme');
 
-        const cachedBackground = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null') || {};
-        localStorage.setItem(COVER_BACKGROUND_STORAGE_KEY, JSON.stringify({
+        const cachedBackground = getStorageJson(COVER_BACKGROUND_STORAGE_KEY, null) || {};
+        setStorageJson(COVER_BACKGROUND_STORAGE_KEY, {
             ...cachedBackground,
             url: isSameBackground ? appliedCoverBackgroundUrl || backgroundCoverUrl : backgroundCoverUrl,
             identity: backgroundIdentity,
-        }));
+        });
     } catch {}
 };
 
@@ -894,29 +881,30 @@ const applyCoverBackground = () => {
         root.style.setProperty('--cover-readable-overlay', overlay);
         root.classList.add('has-cover-theme');
         document.body.classList.add('has-cover-theme');
-        localStorage.setItem(COVER_BACKGROUND_STORAGE_KEY, JSON.stringify({
+        setStorageJson(COVER_BACKGROUND_STORAGE_KEY, {
             url: isSameBackground && appliedCoverBackgroundUrl === backgroundCoverUrl ? appliedCoverBackgroundUrl : backgroundCoverUrl,
             identity: backgroundIdentity,
             overlay,
             pageBg: colorToRgb(base),
-        }));
+        });
         applyAdaptiveCoverColors();
     } catch {
-        resetCoverBackground(true);
+        resetCoverColors();
+        startCoverBackgroundPreload();
     }
 };
 
 const setAdaptiveCoverColorsEnabled = (enabled) => {
     adaptiveCoverColorsEnabled = enabled;
-    localStorage.setItem(ADAPTIVE_COLORS_STORAGE_KEY, String(enabled));
+    setStorageBoolean(ADAPTIVE_COLORS_STORAGE_KEY, enabled);
     setCoverThemeToggle();
 
     if (!enabled) {
         resetCoverColors();
-        const cachedBackground = JSON.parse(localStorage.getItem(COVER_BACKGROUND_STORAGE_KEY) || 'null');
+        const cachedBackground = getStorageJson(COVER_BACKGROUND_STORAGE_KEY, null);
         if (cachedBackground?.url) {
             delete cachedBackground.colors;
-            localStorage.setItem(COVER_BACKGROUND_STORAGE_KEY, JSON.stringify(cachedBackground));
+            setStorageJson(COVER_BACKGROUND_STORAGE_KEY, cachedBackground);
         }
         if (coverBackgroundEnabled) {
             applyCoverBackground();
@@ -1074,16 +1062,37 @@ const setPlaybackState = (state) => {
     }
 };
 
+const addCoverRetryParam = (coverUrl) => {
+    if (!coverUrl) {
+        return '';
+    }
+
+    try {
+        const url = new URL(coverUrl, window.location.origin);
+        url.searchParams.set('spinachCoverRetry', String(++coverRetryRun));
+        return url.toString();
+    } catch {
+        const separator = coverUrl.includes('?') ? '&' : '?';
+        return `${coverUrl}${separator}spinachCoverRetry=${++coverRetryRun}`;
+    }
+};
+
 const setNowPlayingText = (title, state = 'empty', coverUrl = '', meta = {}) => {
     nowPlayingTitle.textContent = title;
     nowPlayingAlbum.textContent = meta.album || '';
     nowPlayingArtist.textContent = meta.artist || '';
 
-    currentCoverUrl = coverUrl;
+    const shouldForceCoverLoad = Boolean(coverUrl && forceNextCoverLoad);
+    const nextCoverUrl = shouldForceCoverLoad ? addCoverRetryParam(coverUrl) : coverUrl;
+    forceNextCoverLoad = false;
+    currentCoverUrl = nextCoverUrl;
 
-    if (coverUrl) {
-        if (nowPlayingCover.getAttribute('src') !== coverUrl) {
-            nowPlayingCover.src = coverUrl;
+    if (nextCoverUrl) {
+        if (shouldForceCoverLoad) {
+            nowPlayingCover.removeAttribute('src');
+        }
+        if (nowPlayingCover.getAttribute('src') !== nextCoverUrl) {
+            nowPlayingCover.src = nextCoverUrl;
         }
     } else if (!appliedCoverBackgroundUrl) {
         nowPlayingCover.removeAttribute('src');
@@ -1104,6 +1113,10 @@ const setNowPlayingText = (title, state = 'empty', coverUrl = '', meta = {}) => 
 };
 
 const showSavedLastSong = (statusText = 'last played') => {
+    if (suppressSavedLastSong) {
+        return false;
+    }
+
     const saved = getSavedLastSong();
 
     if (!(saved?.title || saved?.artist || saved?.album)) {
@@ -1146,6 +1159,7 @@ const setPlayerSong = (data) => {
     setProgressSlider(data.position, data.duration);
 
     if (hasSong) {
+        suppressSavedLastSong = false;
         saveLastSong(data);
     }
 
@@ -1200,6 +1214,25 @@ const setPlayerSong = (data) => {
     }
 };
 
+const resetNowPlayingDisplay = (statusText = 'connect navidrome') => {
+    suppressSavedLastSong = true;
+    forceNextPlayerRender = true;
+    forceNextCoverLoad = true;
+    coverBackgroundDisabledByUser = false;
+    coverBackgroundEnabled = true;
+    currentSongData = null;
+    currentCoverUrl = '';
+    lastTrackId = '';
+    lastCoverUrl = '';
+    setPlaybackState('stopped');
+    nowPlayingTimer.textContent = statusText;
+    updateStatusPillWidth();
+    setProgressSlider(null, null);
+    resetLyricsState('tap the card to fetch lyrics', { delayShrink: true });
+    resetCoverBackground(false, { removeImage: true });
+    setNowPlayingText('nothing playing', 'empty');
+};
+
 const fetchMprisSong = async ({ force = false } = {}) => {
     if (!isMprisSource()) {
         return;
@@ -1228,7 +1261,7 @@ const fetchMprisSong = async ({ force = false } = {}) => {
             forceNextPlayerRender = true;
         }
 
-        setPlayerSong({ ...await response.json(), source: 'mpris' });
+        setPlayerSong({ ...await response.json(), source: PLAYER_SOURCES.MPRIS });
     } catch {
         if (run !== mprisFetchRun || !isMprisSource()) {
             return;
@@ -1358,10 +1391,12 @@ coverThemeButton?.addEventListener('click', () => {
     }
 
     if (coverBackgroundEnabled) {
+        coverBackgroundDisabledByUser = true;
         resetCoverBackground(true);
         return;
     }
 
+    coverBackgroundDisabledByUser = false;
     coverBackgroundEnabled = true;
     applyCoverBackground();
 });
@@ -1416,13 +1451,14 @@ nowPlayingCover.addEventListener('load', () => {
 });
 
 nowPlayingCover.addEventListener('error', () => {
+    forceNextCoverLoad = true;
     if (currentCoverUrl && coverBackgroundEnabled) {
         startCoverBackgroundPreload();
     }
     resetCoverColors();
 });
 
-window.addEventListener('spinach:advanced-settings-changed', (event) => {
+listenSpinachEvent(EVENT_NAMES.ADVANCED_SETTINGS_CHANGED, (event) => {
     if (event.detail?.setting !== 'backgroundCovers' || !currentCoverUrl || !coverBackgroundEnabled) {
         return;
     }
@@ -1432,7 +1468,7 @@ window.addEventListener('spinach:advanced-settings-changed', (event) => {
     applyCoverBackground();
 });
 
-window.addEventListener('spinach:cache-cleared', (event) => {
+listenSpinachEvent(EVENT_NAMES.CACHE_CLEARED, (event) => {
     if (event.detail?.cache !== 'palettes' || !coverBackgroundEnabled || !currentCoverUrl) {
         return;
     }
@@ -1499,20 +1535,36 @@ const refreshPlayerSource = () => {
     showBrowserPlayerIdle();
 };
 
-window.addEventListener('spinach:player-state', (event) => {
+listenSpinachEvent(EVENT_NAMES.NAVIDROME_CONNECTION_CHANGE, (event) => {
+    forceNextPlayerRender = true;
+    forceNextCoverLoad = true;
+    lastTrackId = '';
+    lastCoverUrl = '';
+
+    if (event.detail?.connected === false) {
+        resetNowPlayingDisplay('connect navidrome');
+        return;
+    }
+
+    if (!coverBackgroundDisabledByUser) {
+        coverBackgroundEnabled = true;
+    }
+});
+
+listenSpinachEvent(EVENT_NAMES.PLAYER_STATE, (event) => {
     if (!isMprisSource()) {
         setPlayerSong(event.detail || {});
     }
 });
 
-window.addEventListener('spinach:player-message', (event) => {
+listenSpinachEvent(EVENT_NAMES.PLAYER_MESSAGE, (event) => {
     if (!isMprisSource() && event.detail?.message) {
         nowPlayingTimer.textContent = event.detail.message;
         updateStatusPillWidth();
     }
 });
 
-window.addEventListener('spinach:player-source-change', refreshPlayerSource);
+listenSpinachEvent(EVENT_NAMES.PLAYER_SOURCE_CHANGE, refreshPlayerSource);
 
 window.spinachNowPlaying = {
     ...(window.spinachNowPlaying || {}),

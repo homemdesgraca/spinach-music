@@ -1,3 +1,7 @@
+import { ENDPOINTS, EVENT_NAMES, STORAGE_KEYS } from './js/core/constants.js';
+import { emitSpinachEvent } from './js/core/events.js';
+import { getStorageBoolean, setStorageBoolean } from './js/core/storage.js';
+
 const configMenu = document.querySelector('.config-menu');
 const configButton = document.querySelector('.config-btn');
 const configCards = document.querySelectorAll('.config-card');
@@ -18,40 +22,53 @@ const backgroundCoverToggle = document.querySelector('#background-cover-toggle')
 const clearCoverCacheButton = document.querySelector('#clear-cover-cache');
 const clearPaletteCacheButton = document.querySelector('#clear-palette-cache');
 const advancedCacheStatus = document.querySelector('.advanced-cache-status');
-const ADVANCED_TRACK_COVER_STORAGE_KEY = 'spinachMusic.fetchTrackCovers';
-const ADVANCED_BACKGROUND_COVER_STORAGE_KEY = 'spinachMusic.highResBackgroundCovers';
+const ADVANCED_TRACK_COVER_STORAGE_KEY = STORAGE_KEYS.FETCH_TRACK_COVERS;
+const ADVANCED_BACKGROUND_COVER_STORAGE_KEY = STORAGE_KEYS.HIGH_RES_BACKGROUND_COVERS;
 
 const closeConfigMenu = () => {
     configMenu.classList.remove('open');
     configButton.setAttribute('aria-expanded', 'false');
 };
 
-const closeThemePanel = () => {
-    themePanel.classList.remove('open');
-    themePanel.setAttribute('aria-hidden', 'true');
+const hidePanel = (panel, focusTarget = configButton) => {
+    if (!panel) {
+        return;
+    }
+
+    if (panel.contains(document.activeElement)) {
+        focusTarget?.focus({ preventScroll: true });
+    }
+
+    panel.classList.remove('open');
+    panel.setAttribute('inert', '');
+    panel.setAttribute('aria-hidden', 'true');
 };
 
-const closeSoundPanel = () => {
-    soundPanel.classList.remove('open');
-    soundPanel.setAttribute('aria-hidden', 'true');
+const showPanel = (panel) => {
+    panel?.removeAttribute('inert');
+    panel?.classList.add('open');
+    panel?.setAttribute('aria-hidden', 'false');
 };
 
-const closeAdvancedPanel = () => {
-    advancedPanel.classList.remove('open');
-    advancedPanel.setAttribute('aria-hidden', 'true');
-};
+[themePanel, soundPanel, advancedPanel, connectionsPanel].forEach((panel) => {
+    if (!panel?.classList.contains('open')) {
+        panel?.setAttribute('inert', '');
+    }
+});
 
-const closeConnectionsPanel = () => {
-    connectionsPanel.classList.remove('open');
-    connectionsPanel.setAttribute('aria-hidden', 'true');
-};
+const closeThemePanel = () => hidePanel(themePanel);
+
+const closeSoundPanel = () => hidePanel(soundPanel);
+
+const closeAdvancedPanel = () => hidePanel(advancedPanel);
+
+const closeConnectionsPanel = () => hidePanel(connectionsPanel);
 
 const openThemePanel = () => {
     closeConnectionsPanel();
     closeSoundPanel();
     closeAdvancedPanel();
-    themePanel.classList.add('open');
-    themePanel.setAttribute('aria-hidden', 'false');
+    showPanel(themePanel);
     closeConfigMenu();
 };
 
@@ -59,8 +76,7 @@ const openSoundPanel = () => {
     closeConnectionsPanel();
     closeThemePanel();
     closeAdvancedPanel();
-    soundPanel.classList.add('open');
-    soundPanel.setAttribute('aria-hidden', 'false');
+    showPanel(soundPanel);
     closeConfigMenu();
 };
 
@@ -68,8 +84,7 @@ const openAdvancedPanel = () => {
     closeConnectionsPanel();
     closeThemePanel();
     closeSoundPanel();
-    advancedPanel.classList.add('open');
-    advancedPanel.setAttribute('aria-hidden', 'false');
+    showPanel(advancedPanel);
     closeConfigMenu();
 };
 
@@ -77,8 +92,7 @@ const openConnectionsPanel = () => {
     closeThemePanel();
     closeSoundPanel();
     closeAdvancedPanel();
-    connectionsPanel.classList.add('open');
-    connectionsPanel.setAttribute('aria-hidden', 'false');
+    showPanel(connectionsPanel);
     closeConfigMenu();
 };
 
@@ -99,25 +113,21 @@ const setAdvancedToggle = (toggle, enabled) => {
     }
 };
 
-setAdvancedToggle(trackCoverToggle, localStorage.getItem(ADVANCED_TRACK_COVER_STORAGE_KEY) === 'true');
-setAdvancedToggle(backgroundCoverToggle, localStorage.getItem(ADVANCED_BACKGROUND_COVER_STORAGE_KEY) === 'true');
+setAdvancedToggle(trackCoverToggle, getStorageBoolean(ADVANCED_TRACK_COVER_STORAGE_KEY));
+setAdvancedToggle(backgroundCoverToggle, getStorageBoolean(ADVANCED_BACKGROUND_COVER_STORAGE_KEY));
 
 trackCoverToggle?.addEventListener('click', () => {
     const enabled = trackCoverToggle.getAttribute('aria-pressed') !== 'true';
-    localStorage.setItem(ADVANCED_TRACK_COVER_STORAGE_KEY, String(enabled));
+    setStorageBoolean(ADVANCED_TRACK_COVER_STORAGE_KEY, enabled);
     setAdvancedToggle(trackCoverToggle, enabled);
-    window.dispatchEvent(new CustomEvent('spinach:advanced-settings-changed', {
-        detail: { setting: 'trackCovers', enabled },
-    }));
+    emitSpinachEvent(EVENT_NAMES.ADVANCED_SETTINGS_CHANGED, { setting: 'trackCovers', enabled });
 });
 
 backgroundCoverToggle?.addEventListener('click', () => {
     const enabled = backgroundCoverToggle.getAttribute('aria-pressed') !== 'true';
-    localStorage.setItem(ADVANCED_BACKGROUND_COVER_STORAGE_KEY, String(enabled));
+    setStorageBoolean(ADVANCED_BACKGROUND_COVER_STORAGE_KEY, enabled);
     setAdvancedToggle(backgroundCoverToggle, enabled);
-    window.dispatchEvent(new CustomEvent('spinach:advanced-settings-changed', {
-        detail: { setting: 'backgroundCovers', enabled },
-    }));
+    emitSpinachEvent(EVENT_NAMES.ADVANCED_SETTINGS_CHANGED, { setting: 'backgroundCovers', enabled });
 });
 
 const setAdvancedCacheStatus = (message = '', type = '') => {
@@ -147,9 +157,7 @@ const clearServerCache = async ({ endpoint, label, button, cache }) => {
 
         const count = Number.isFinite(Number(payload.files)) ? Number(payload.files) : 0;
         setAdvancedCacheStatus(`${label} cleared (${count} files)`, 'ok');
-        window.dispatchEvent(new CustomEvent('spinach:cache-cleared', {
-            detail: { cache, files: count },
-        }));
+        emitSpinachEvent(EVENT_NAMES.CACHE_CLEARED, { cache, files: count });
     } catch (error) {
         setAdvancedCacheStatus((error?.message || 'cache clear failed').toLowerCase(), 'error');
     } finally {
@@ -158,14 +166,14 @@ const clearServerCache = async ({ endpoint, label, button, cache }) => {
 };
 
 clearCoverCacheButton?.addEventListener('click', () => clearServerCache({
-    endpoint: '/cache/covers/clear',
+    endpoint: ENDPOINTS.CACHE_COVERS_CLEAR,
     label: 'cover cache',
     button: clearCoverCacheButton,
     cache: 'covers',
 }));
 
 clearPaletteCacheButton?.addEventListener('click', () => clearServerCache({
-    endpoint: '/cache/palettes/clear',
+    endpoint: ENDPOINTS.CACHE_PALETTES_CLEAR,
     label: 'palette cache',
     button: clearPaletteCacheButton,
     cache: 'palettes',
