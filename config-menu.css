@@ -76,6 +76,10 @@
     transition: opacity 0.2s ease-out, transform 0.28s var(--ease-soft), background 0.75s var(--ease-soft), color 0.75s var(--ease-soft), border-color 0.75s var(--ease-soft), box-shadow 0.75s var(--ease-soft);
 }
 
+.advanced-panel {
+    width: min(18.5rem, 84vw);
+}
+
 .theme-panel h2,
 .sound-panel h2,
 .advanced-panel h2,
@@ -102,6 +106,10 @@
     gap: 0.35rem;
 }
 
+.advanced-cache-card p {
+    font-size: 0.9rem;
+}
+
 .sound-note,
 .advanced-note {
     margin-top: 0.72rem;
@@ -109,4 +117,25 @@
     font-weight: 700;
     line-height: 1.25;
     opacity: 0.76;
+}
+
+.advanced-cache-status:empty {
+    display: none;
+}
+
+.advanced-cache-status.ok {
+    color: var(--color-ok);
+    opacity: 1;
+}
+
+.advanced-cache-status.error {
+    width: fit-content;
+    padding: 0.18rem 0.42rem;
+    border: 2px solid var(--color-error-text);
+    border-radius: var(--radius-pill);
+    background: var(--color-error);
+    color: var(--color-error-text);
+    box-shadow: 1px 2px 0 color-mix(in srgb, var(--color-error) 72%, #000);
+    text-shadow: 1px 1px 0 color-mix(in srgb, var(--color-error) 76%, #000);
+    opacity: 1;
 }

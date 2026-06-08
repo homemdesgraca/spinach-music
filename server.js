@@ -1,7 +1,7 @@
 const http = require('http');
 const https = require('https');
 const { execFile, execFileSync } = require('child_process');
-const { mkdir, readFile, writeFile } = require('fs/promises');
+const { mkdir, readFile, readdir, rm, writeFile } = require('fs/promises');
 const { createReadStream } = require('fs');
 const { createHash } = require('crypto');
 const { extname, join, normalize } = require('path');
@@ -1156,6 +1156,56 @@ const cacheRemoteArt = async (artUrl, cacheKey) => {
     return { imagePath, contentType, cached: false, buffer, palette };
 };
 
+const sendClearCoverCache = async (request, response) => {
+    if (request.method !== 'POST') {
+        sendJson(response, 405, { ok: false, error: 'method not allowed' });
+        return;
+    }
+
+    try {
+        const files = await readdir(COVER_CACHE_DIR).catch(() => []);
+        await rm(COVER_CACHE_DIR, { recursive: true, force: true });
+        await mkdir(COVER_CACHE_DIR, { recursive: true });
+        sendJson(response, 200, { ok: true, files: files.length });
+    } catch (error) {
+        sendJson(response, 500, { ok: false, error: error?.message || 'failed to clear cover cache' });
+    }
+};
+
+const sendClearPaletteCache = async (request, response) => {
+    if (request.method !== 'POST') {
+        sendJson(response, 405, { ok: false, error: 'method not allowed' });
+        return;
+    }
+
+    try {
+        const files = await readdir(COVER_CACHE_DIR).catch(() => []);
+        let cleared = 0;
+
+        await Promise.all(files
+            .filter((file) => file.endsWith('.json'))
+            .map(async (file) => {
+                const metaPath = join(COVER_CACHE_DIR, file);
+                try {
+                    const meta = JSON.parse(await readFile(metaPath, 'utf8'));
+                    if (!meta.palette && !meta.paletteVersion) {
+                        return;
+                    }
+
+                    delete meta.palette;
+                    delete meta.paletteVersion;
+                    meta.paletteClearedAt = new Date().toISOString();
+                    await writeFile(metaPath, JSON.stringify(meta));
+                    cleared += 1;
+                } catch {}
+            }));
+
+        sendJson(response, 200, { ok: true, files: cleared });
+    } catch (error) {
+        sendJson(response, 500, { ok: false, error: error?.message || 'failed to clear palette cache' });
+    }
+};
+
 const sendCachedRemoteArt = async (artUrl, response, cacheKey) => {
     try {
         const { imagePath, contentType, buffer } = await cacheRemoteArt(artUrl, cacheKey);
@@ -1325,6 +1375,16 @@ const server = http.createServer(async (request, response) => {
 
     if (pathname === '/navidrome/cache-cover') {
         await sendNavidromeCacheCover(request, response);
+        return;
+    }
+
+    if (pathname === '/cache/covers/clear') {
+        await sendClearCoverCache(request, response);
+        return;
+    }
+
+    if (pathname === '/cache/palettes/clear') {
+        await sendClearPaletteCache(request, response);
         return;
     }
 

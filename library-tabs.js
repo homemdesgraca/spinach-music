@@ -482,6 +482,16 @@ const queueImagePalette = (card, image, coverKey) => {
     image.addEventListener('load', apply, { once: true });
 };
 
+const recalculateVisibleCardPalettes = () => {
+    document.querySelectorAll('.library-card[data-cover-key]').forEach((card) => {
+        const coverKey = card.dataset.coverKey;
+        const image = card.querySelector('.library-card-cover img');
+
+        card.classList.remove('has-cover-palette', 'is-dark-cover');
+        queueImagePalette(card, image, coverKey);
+    });
+};
+
 const applyCoverToCards = (coverKey, coverUrl, palette = null) => {
     if (!coverUrl) {
         return;
@@ -1727,6 +1737,31 @@ const warmLibraryCache = () => {
     fetchLibraryMode('artists');
     fetchLibraryMode('albums');
 };
+
+window.addEventListener('spinach:cache-cleared', (event) => {
+    const cache = event.detail?.cache;
+    if (cache !== 'covers' && cache !== 'palettes') {
+        return;
+    }
+
+    coverPaletteCache.clear();
+    visualPaletteCache.clear();
+
+    if (cache === 'covers') {
+        coverCache.clear();
+    }
+
+    Object.values(deckCards).flat().forEach((item) => {
+        item.palette = null;
+        if (cache === 'covers') {
+            item.coverUrl = '';
+        }
+    });
+
+    if (cache === 'palettes') {
+        recalculateVisibleCardPalettes();
+    }
+});
 
 window.addEventListener('spinach:navidrome-connection-change', () => {
     resetLibraryDeckData();

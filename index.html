@@ -68,11 +68,11 @@
                 } catch {}
             })();
         </script>
-        <link rel="stylesheet" href="css/tokens.css?v=1">
+        <link rel="stylesheet" href="css/tokens.css?v=2">
         <link rel="stylesheet" href="css/motion.css?v=1">
-        <link rel="stylesheet" href="css/components.css?v=1">
+        <link rel="stylesheet" href="css/components.css?v=3">
         <link rel="stylesheet" href="styles.css?v=34">
-        <link rel="stylesheet" href="config-menu.css?v=5">
+        <link rel="stylesheet" href="config-menu.css?v=7">
         <link rel="stylesheet" href="connections-panel.css?v=7">
 
     </head>
@@ -151,8 +151,17 @@
                 <p>high-res backgrounds</p>
                 <button class="advanced-toggle" id="background-cover-toggle" type="button" aria-pressed="false">off</button>
             </div>
+            <div class="advanced-card advanced-cache-card">
+                <p>cover cache</p>
+                <button class="advanced-action" id="clear-cover-cache" type="button">clear</button>
+            </div>
+            <div class="advanced-card advanced-cache-card">
+                <p>palette cache</p>
+                <button class="advanced-action" id="clear-palette-cache" type="button">clear</button>
+            </div>
             <p class="advanced-note">track covers off reuses the album cover in track decks.</p>
             <p class="advanced-note">backgrounds use 1024px by default. high-res uses 1600px.</p>
+            <p class="advanced-note advanced-cache-status" aria-live="polite"></p>
         </section>
 
         <section class="connections-panel" aria-hidden="true">
@@ -243,12 +252,12 @@
             </section>
         </section>
 
-        <script src="menu.js?v=5"></script>
+        <script src="menu.js?v=6"></script>
         <script src="sound.js?v=1"></script>
         <script src="navidrome.js?v=14"></script>
         <script src="player.js?v=4"></script>
-        <script src="library-tabs.js?v=54"></script>
-        <script src="now-playing.js?v=63"></script>
+        <script src="library-tabs.js?v=56"></script>
+        <script src="now-playing.js?v=64"></script>
     </body>
 
 </html>

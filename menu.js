@@ -15,6 +15,9 @@ const soundClose = document.querySelector('.sound-close');
 const advancedClose = document.querySelector('.advanced-close');
 const trackCoverToggle = document.querySelector('#track-cover-toggle');
 const backgroundCoverToggle = document.querySelector('#background-cover-toggle');
+const clearCoverCacheButton = document.querySelector('#clear-cover-cache');
+const clearPaletteCacheButton = document.querySelector('#clear-palette-cache');
+const advancedCacheStatus = document.querySelector('.advanced-cache-status');
 const ADVANCED_TRACK_COVER_STORAGE_KEY = 'spinachMusic.fetchTrackCovers';
 const ADVANCED_BACKGROUND_COVER_STORAGE_KEY = 'spinachMusic.highResBackgroundCovers';
 
@@ -116,6 +119,57 @@ backgroundCoverToggle?.addEventListener('click', () => {
         detail: { setting: 'backgroundCovers', enabled },
     }));
 });
+
+const setAdvancedCacheStatus = (message = '', type = '') => {
+    if (!advancedCacheStatus) {
+        return;
+    }
+
+    advancedCacheStatus.textContent = message;
+    advancedCacheStatus.className = `advanced-note advanced-cache-status ${type}`.trim();
+};
+
+const clearServerCache = async ({ endpoint, label, button, cache }) => {
+    if (!button) {
+        return;
+    }
+
+    button.disabled = true;
+    setAdvancedCacheStatus(`clearing ${label}...`);
+
+    try {
+        const response = await fetch(endpoint, { method: 'POST' });
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok || payload?.ok === false) {
+            throw new Error(payload?.error || 'cache clear failed');
+        }
+
+        const count = Number.isFinite(Number(payload.files)) ? Number(payload.files) : 0;
+        setAdvancedCacheStatus(`${label} cleared (${count} files)`, 'ok');
+        window.dispatchEvent(new CustomEvent('spinach:cache-cleared', {
+            detail: { cache, files: count },
+        }));
+    } catch (error) {
+        setAdvancedCacheStatus((error?.message || 'cache clear failed').toLowerCase(), 'error');
+    } finally {
+        button.disabled = false;
+    }
+};
+
+clearCoverCacheButton?.addEventListener('click', () => clearServerCache({
+    endpoint: '/cache/covers/clear',
+    label: 'cover cache',
+    button: clearCoverCacheButton,
+    cache: 'covers',
+}));
+
+clearPaletteCacheButton?.addEventListener('click', () => clearServerCache({
+    endpoint: '/cache/palettes/clear',
+    label: 'palette cache',
+    button: clearPaletteCacheButton,
+    cache: 'palettes',
+}));
 
 themeButton.addEventListener('click', openThemePanel);
 soundButton.addEventListener('click', openSoundPanel);

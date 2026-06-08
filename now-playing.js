@@ -1085,7 +1085,7 @@ const setNowPlayingText = (title, state = 'empty', coverUrl = '', meta = {}) => 
         if (nowPlayingCover.getAttribute('src') !== coverUrl) {
             nowPlayingCover.src = coverUrl;
         }
-    } else {
+    } else if (!appliedCoverBackgroundUrl) {
         nowPlayingCover.removeAttribute('src');
     }
 
@@ -1096,8 +1096,6 @@ const setNowPlayingText = (title, state = 'empty', coverUrl = '', meta = {}) => 
     if (coverUrl && coverBackgroundEnabled) {
         startCoverBackgroundPreload();
         requestAnimationFrame(applyCoverBackground);
-    } else if (!coverUrl) {
-        resetCoverBackground();
     }
 
     nowPlayingBar.classList.remove('is-playing', 'is-empty');
@@ -1417,6 +1415,14 @@ window.addEventListener('spinach:advanced-settings-changed', (event) => {
     appliedCoverBackgroundIdentity = '';
     startCoverBackgroundPreload();
     applyCoverBackground();
+});
+
+window.addEventListener('spinach:cache-cleared', (event) => {
+    if (event.detail?.cache !== 'palettes' || !coverBackgroundEnabled || !currentCoverUrl) {
+        return;
+    }
+
+    applyAdaptiveCoverColors();
 });
 
 window.addEventListener('resize', () => {

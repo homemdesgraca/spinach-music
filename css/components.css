@@ -126,7 +126,8 @@
 
 .theme-toggle,
 .sound-toggle,
-.advanced-toggle {
+.advanced-toggle,
+.advanced-action {
     min-width: 3.4rem;
     padding: 0.28rem 0.5rem;
     border: 2px solid var(--color-text);
@@ -144,6 +145,22 @@
 .advanced-toggle.is-on {
     background: var(--color-text);
     color: var(--color-input-bg);
+}
+
+.advanced-action:hover {
+    background: var(--color-surface-hover);
+    transform: translateY(-1px);
+    box-shadow: 1px 3px 0 var(--color-shadow);
+}
+
+.advanced-action:active {
+    transform: translateY(1px) scale(0.98);
+    box-shadow: 1px 1px 0 var(--color-shadow);
+}
+
+.advanced-action:disabled {
+    cursor: wait;
+    opacity: 0.66;
 }
 
 .connection-card input,
@@ -192,6 +209,14 @@
 }
 
 .connection-status.error {
-    color: var(--color-error);
+    width: fit-content;
+    max-width: 100%;
+    padding: 0.18rem 0.42rem;
+    border: 2px solid var(--color-error-text);
+    border-radius: var(--radius-pill);
+    background: var(--color-error);
+    color: var(--color-error-text);
+    box-shadow: 1px 2px 0 color-mix(in srgb, var(--color-error) 72%, #000);
+    text-shadow: 1px 1px 0 color-mix(in srgb, var(--color-error) 76%, #000);
 }
 
