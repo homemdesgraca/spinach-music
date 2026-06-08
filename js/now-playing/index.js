@@ -11,7 +11,7 @@ import { createMarqueeController } from '../ui/marquee.js';
 import { createCoverThemeController } from './cover-theme.js';
 import { createLyricsController } from './lyrics.js';
 import { createMprisController } from './mpris.js';
-import { clamp, createProgressController } from './progress.js';
+import { clamp, createProgressController, getRangeWheelDirection } from './progress.js';
 import { createDisplayRenderer, formatCoverIdentity, formatSongMeta, normalizePlaybackState } from './render.js';
 
 const elements = {
@@ -356,6 +356,26 @@ if (elements.playerVolumeSlider) {
     elements.playerVolumeSlider.addEventListener('input', () => {
         sendPlayerVolume((Number.parseFloat(elements.playerVolumeSlider.value) || 0) / 100);
     });
+
+    const volumeWheelTarget = elements.playerVolumeSlider.parentElement || elements.playerVolumeSlider;
+
+    volumeWheelTarget.addEventListener('wheel', (event) => {
+        const direction = getRangeWheelDirection(event);
+
+        if (!direction || elements.playerVolumeSlider.disabled) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const min = Number.parseFloat(elements.playerVolumeSlider.min) || 0;
+        const max = Number.parseFloat(elements.playerVolumeSlider.max) || 100;
+        const step = Number.parseFloat(elements.playerVolumeSlider.step) || 1;
+        const currentVolume = Number.parseFloat(elements.playerVolumeSlider.value) || 0;
+        const nextVolume = clamp(currentVolume + (direction * step), min, max);
+
+        sendPlayerVolume(nextVolume / 100);
+    }, { passive: false });
 
     elements.playerVolumeSlider.addEventListener('change', () => {
         sendPlayerVolume((Number.parseFloat(elements.playerVolumeSlider.value) || 0) / 100, true);
