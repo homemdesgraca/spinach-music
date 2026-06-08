@@ -1,4 +1,4 @@
-import { DEFAULTS, PLAYER_SOURCES, STORAGE_KEYS } from './constants.js';
+import { BACKGROUND_COVER_QUALITIES, DEFAULTS, PLAYER_SOURCES, STORAGE_KEYS } from './constants.js';
 
 export const getStorageValue = (key, fallback = '') => {
     try {
@@ -48,6 +48,29 @@ export const getPlayerSource = () => normalizePlayerSource(getStorageValue(STORA
 export const setPlayerSource = (source) => {
     const normalized = normalizePlayerSource(source);
     setStorageValue(STORAGE_KEYS.PLAYER_SOURCE, normalized);
+    return normalized;
+};
+
+export const normalizeBackgroundCoverQuality = (quality) => (
+    Object.values(BACKGROUND_COVER_QUALITIES).includes(quality)
+        ? quality
+        : DEFAULTS.BACKGROUND_COVER_QUALITY
+);
+
+export const getBackgroundCoverQuality = () => {
+    const stored = getStorageValue(STORAGE_KEYS.BACKGROUND_COVER_QUALITY, '');
+    if (stored) {
+        return normalizeBackgroundCoverQuality(stored);
+    }
+
+    return getStorageBoolean(STORAGE_KEYS.HIGH_RES_BACKGROUND_COVERS)
+        ? BACKGROUND_COVER_QUALITIES.AMAZING
+        : DEFAULTS.BACKGROUND_COVER_QUALITY;
+};
+
+export const setBackgroundCoverQuality = (quality) => {
+    const normalized = normalizeBackgroundCoverQuality(quality);
+    setStorageValue(STORAGE_KEYS.BACKGROUND_COVER_QUALITY, normalized);
     return normalized;
 };
 

@@ -101,8 +101,10 @@
     text-shadow: 1px 1px 0 var(--color-shadow);
 }
 
-.sound-source-options {
+.sound-source-options,
+.background-quality-options {
     display: inline-flex;
+    flex-wrap: wrap;
     gap: 0.35rem;
 }
 

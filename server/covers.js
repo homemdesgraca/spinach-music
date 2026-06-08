@@ -9,8 +9,9 @@ const { COVER_PALETTE_VERSION, extractCoverPalette } = require('./palette');
 
 const COVER_CACHE_DIR = join(ROOT, '.cache', 'covers');
 const COVER_ART_SIZE = 768;
-const COVER_BACKGROUND_SIZE = 1024;
+const COVER_BACKGROUND_SIZE = 1000;
 const COVER_BACKGROUND_HIGH_SIZE = 1600;
+const COVER_BACKGROUND_MAX_SIZE = 'max';
 
 const fetchRemoteBinary = (remoteUrl, redirects = 4) => new Promise((resolve, reject) => {
     const client = remoteUrl.startsWith('https:') ? https : http;
@@ -170,6 +171,7 @@ module.exports = {
     COVER_ART_SIZE,
     COVER_BACKGROUND_SIZE,
     COVER_BACKGROUND_HIGH_SIZE,
+    COVER_BACKGROUND_MAX_SIZE,
     cacheRemoteArt,
     getFirstCachedRemoteArt,
     sendClearCoverCache,

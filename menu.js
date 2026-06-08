@@ -1,6 +1,11 @@
 import { ENDPOINTS, EVENT_NAMES, STORAGE_KEYS } from './js/core/constants.js';
 import { emitSpinachEvent } from './js/core/events.js';
-import { getStorageBoolean, setStorageBoolean } from './js/core/storage.js';
+import {
+    getBackgroundCoverQuality,
+    getStorageBoolean,
+    setBackgroundCoverQuality,
+    setStorageBoolean,
+} from './js/core/storage.js';
 
 const configMenu = document.querySelector('.config-menu');
 const configButton = document.querySelector('.config-btn');
@@ -18,12 +23,11 @@ const themeClose = document.querySelector('.theme-close');
 const soundClose = document.querySelector('.sound-close');
 const advancedClose = document.querySelector('.advanced-close');
 const trackCoverToggle = document.querySelector('#track-cover-toggle');
-const backgroundCoverToggle = document.querySelector('#background-cover-toggle');
+const backgroundQualityButtons = document.querySelectorAll('[data-background-quality]');
 const clearCoverCacheButton = document.querySelector('#clear-cover-cache');
 const clearPaletteCacheButton = document.querySelector('#clear-palette-cache');
 const advancedCacheStatus = document.querySelector('.advanced-cache-status');
 const ADVANCED_TRACK_COVER_STORAGE_KEY = STORAGE_KEYS.FETCH_TRACK_COVERS;
-const ADVANCED_BACKGROUND_COVER_STORAGE_KEY = STORAGE_KEYS.HIGH_RES_BACKGROUND_COVERS;
 
 const closeConfigMenu = () => {
     configMenu.classList.remove('open');
@@ -113,8 +117,16 @@ const setAdvancedToggle = (toggle, enabled) => {
     }
 };
 
+const setBackgroundQuality = (quality) => {
+    backgroundQualityButtons.forEach((button) => {
+        const isSelected = button.dataset.backgroundQuality === quality;
+        button.classList.toggle('is-on', isSelected);
+        button.setAttribute('aria-pressed', String(isSelected));
+    });
+};
+
 setAdvancedToggle(trackCoverToggle, getStorageBoolean(ADVANCED_TRACK_COVER_STORAGE_KEY));
-setAdvancedToggle(backgroundCoverToggle, getStorageBoolean(ADVANCED_BACKGROUND_COVER_STORAGE_KEY));
+setBackgroundQuality(getBackgroundCoverQuality());
 
 trackCoverToggle?.addEventListener('click', () => {
     const enabled = trackCoverToggle.getAttribute('aria-pressed') !== 'true';
@@ -123,11 +135,12 @@ trackCoverToggle?.addEventListener('click', () => {
     emitSpinachEvent(EVENT_NAMES.ADVANCED_SETTINGS_CHANGED, { setting: 'trackCovers', enabled });
 });
 
-backgroundCoverToggle?.addEventListener('click', () => {
-    const enabled = backgroundCoverToggle.getAttribute('aria-pressed') !== 'true';
-    setStorageBoolean(ADVANCED_BACKGROUND_COVER_STORAGE_KEY, enabled);
-    setAdvancedToggle(backgroundCoverToggle, enabled);
-    emitSpinachEvent(EVENT_NAMES.ADVANCED_SETTINGS_CHANGED, { setting: 'backgroundCovers', enabled });
+backgroundQualityButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        const quality = setBackgroundCoverQuality(button.dataset.backgroundQuality);
+        setBackgroundQuality(quality);
+        emitSpinachEvent(EVENT_NAMES.ADVANCED_SETTINGS_CHANGED, { setting: 'backgroundQuality', quality });
+    });
 });
 
 const setAdvancedCacheStatus = (message = '', type = '') => {

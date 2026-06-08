@@ -367,7 +367,7 @@ coverTheme.bindEvents();
 lyrics.bindEvents();
 
 listenSpinachEvent(EVENT_NAMES.ADVANCED_SETTINGS_CHANGED, (event) => {
-    if (event.detail?.setting !== 'backgroundCovers' || !currentCoverUrl || !coverTheme.isBackgroundEnabled()) {
+    if (event.detail?.setting !== 'backgroundQuality' || !currentCoverUrl || !coverTheme.isBackgroundEnabled()) {
         return;
     }
 

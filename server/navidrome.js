@@ -12,6 +12,7 @@ const {
 const {
     COVER_ART_SIZE,
     COVER_BACKGROUND_HIGH_SIZE,
+    COVER_BACKGROUND_MAX_SIZE,
     COVER_BACKGROUND_SIZE,
     getFirstCachedRemoteArt,
 } = require('./covers');
@@ -315,10 +316,13 @@ const getNavidromeCoverTargets = async (request) => {
     const coverArt = firstLine(searchParams.get('coverArt'));
     const imageUrl = firstLine(searchParams.get('imageUrl'));
     const type = firstLine(searchParams.get('type'));
-    const requestedSize = Number.parseInt(searchParams.get('size'), 10);
-    const coverSize = requestedSize === COVER_BACKGROUND_HIGH_SIZE
-        ? COVER_BACKGROUND_HIGH_SIZE
-        : requestedSize === COVER_BACKGROUND_SIZE ? COVER_BACKGROUND_SIZE : COVER_ART_SIZE;
+    const rawSize = firstLine(searchParams.get('size'));
+    const requestedSize = Number.parseInt(rawSize, 10);
+    const coverSize = rawSize === COVER_BACKGROUND_MAX_SIZE
+        ? COVER_BACKGROUND_MAX_SIZE
+        : requestedSize === COVER_BACKGROUND_HIGH_SIZE
+            ? COVER_BACKGROUND_HIGH_SIZE
+            : requestedSize === COVER_BACKGROUND_SIZE ? COVER_BACKGROUND_SIZE : COVER_ART_SIZE;
 
     if (!connection.url || !connection.username || !connection.password) {
         throw new Error('missing navidrome connection');
@@ -328,11 +332,12 @@ const getNavidromeCoverTargets = async (request) => {
     const targets = [];
 
     if (coverArt) {
+        const coverArtParams = coverSize === COVER_BACKGROUND_MAX_SIZE
+            ? { id: coverArt }
+            : { id: coverArt, size: coverSize };
+
         targets.push({
-            artUrl: buildNavidromeUrl(connection, 'getCoverArt', {
-                id: coverArt,
-                size: coverSize,
-            }).toString(),
+            artUrl: buildNavidromeUrl(connection, 'getCoverArt', coverArtParams).toString(),
             cacheKey: `${cachePrefix}|coverArt|${coverArt}|size:${coverSize}`,
         });
     }

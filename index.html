@@ -75,7 +75,7 @@
         <link rel="stylesheet" href="css/motion.css?v=1">
         <link rel="stylesheet" href="css/components.css?v=3">
         <link rel="stylesheet" href="styles.css?v=36">
-        <link rel="stylesheet" href="config-menu.css?v=7">
+        <link rel="stylesheet" href="config-menu.css?v=8">
         <link rel="stylesheet" href="connections-panel.css?v=8">
         <link rel="stylesheet" href="css/onboarding.css?v=1">
 
@@ -152,8 +152,12 @@
                 <button class="advanced-toggle" id="track-cover-toggle" type="button" aria-pressed="false">off</button>
             </div>
             <div class="advanced-card">
-                <p>high-res backgrounds</p>
-                <button class="advanced-toggle" id="background-cover-toggle" type="button" aria-pressed="false">off</button>
+                <p>album cover background quality</p>
+                <div class="background-quality-options" role="group" aria-label="album cover background quality">
+                    <button class="advanced-toggle" type="button" data-background-quality="great" aria-pressed="true">great</button>
+                    <button class="advanced-toggle" type="button" data-background-quality="amazing" aria-pressed="false">amazing</button>
+                    <button class="advanced-toggle" type="button" data-background-quality="max" aria-pressed="false">max</button>
+                </div>
             </div>
             <div class="advanced-card advanced-cache-card">
                 <p>cover cache</p>
@@ -164,7 +168,7 @@
                 <button class="advanced-action" id="clear-palette-cache" type="button">clear</button>
             </div>
             <p class="advanced-note">track covers off reuses the album cover in track decks.</p>
-            <p class="advanced-note">backgrounds use 1024px by default. high-res uses 1600px.</p>
+            <p class="advanced-note">great caps backgrounds at 1000px. amazing uses 1600px. max asks navidrome for the highest available art.</p>
             <p class="advanced-note advanced-cache-status" aria-live="polite"></p>
         </section>
 
@@ -254,12 +258,12 @@
             </section>
         </section>
 
-        <script type="module" src="menu.js?v=7"></script>
+        <script type="module" src="menu.js?v=8"></script>
         <script type="module" src="sound.js?v=2"></script>
         <script type="module" src="navidrome.js?v=16"></script>
         <script type="module" src="player.js?v=5"></script>
         <script type="module" src="library-tabs.js?v=58"></script>
-        <script type="module" src="now-playing.js?v=67"></script>
+        <script type="module" src="now-playing.js?v=68"></script>
     </body>
 
 </html>

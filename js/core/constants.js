@@ -11,6 +11,7 @@ export const STORAGE_KEYS = Object.freeze({
     NAVIDROME_PLAYER_STATE: 'spinachMusic.navidromePlayerState',
     FETCH_TRACK_COVERS: 'spinachMusic.fetchTrackCovers',
     HIGH_RES_BACKGROUND_COVERS: 'spinachMusic.highResBackgroundCovers',
+    BACKGROUND_COVER_QUALITY: 'spinachMusic.backgroundCoverQuality',
     ADAPTIVE_COVER_COLORS: 'spinachMusic.adaptiveCoverColors',
     COVER_BACKGROUND: 'spinachMusic.coverBackground',
     LAST_SONG: 'spinachMusic.lastSong',
@@ -40,10 +41,17 @@ export const ENDPOINTS = Object.freeze({
     CACHE_PALETTES_CLEAR: '/cache/palettes/clear',
 });
 
+export const BACKGROUND_COVER_QUALITIES = Object.freeze({
+    GREAT: 'great',
+    AMAZING: 'amazing',
+    MAX: 'max',
+});
+
 export const DEFAULTS = Object.freeze({
     NAVIDROME_URL: 'http://127.0.0.1:4533/',
     PLAYER_SOURCE: PLAYER_SOURCES.NAVIDROME,
     VOLUME: 0.60,
+    BACKGROUND_COVER_QUALITY: BACKGROUND_COVER_QUALITIES.GREAT,
 });
 
 export const SUBSONIC_CLIENT = Object.freeze({

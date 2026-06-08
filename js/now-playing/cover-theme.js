@@ -1,6 +1,6 @@
-import { ENDPOINTS, STORAGE_KEYS } from '../core/constants.js';
+import { BACKGROUND_COVER_QUALITIES, ENDPOINTS, STORAGE_KEYS } from '../core/constants.js';
 import {
-    getStorageBoolean,
+    getBackgroundCoverQuality,
     getStorageJson,
     getStorageValue,
     removeStorageValue,
@@ -10,7 +10,6 @@ import {
 
 const ADAPTIVE_COLORS_STORAGE_KEY = STORAGE_KEYS.ADAPTIVE_COVER_COLORS;
 const COVER_BACKGROUND_STORAGE_KEY = STORAGE_KEYS.COVER_BACKGROUND;
-const HIGH_RES_BACKGROUND_STORAGE_KEY = STORAGE_KEYS.HIGH_RES_BACKGROUND_COVERS;
 
 const defaultTheme = {
     '--color-page-bg': '#74c69d',
@@ -88,9 +87,15 @@ const getCoverBackgroundIdentity = (data = {}, coverUrl = '') => {
     return artist || title ? `track:${artist}:${title}` : `cover:${coverUrl}`;
 };
 
-const getCoverBackgroundSize = () => (
-    getStorageBoolean(HIGH_RES_BACKGROUND_STORAGE_KEY) ? 1600 : 1024
-);
+const getCoverBackgroundSize = () => {
+    const quality = getBackgroundCoverQuality();
+
+    if (quality === BACKGROUND_COVER_QUALITIES.MAX) {
+        return 'max';
+    }
+
+    return quality === BACKGROUND_COVER_QUALITIES.AMAZING ? 1600 : 1000;
+};
 
 const getStableCoverBackgroundUrl = (coverUrl) => {
     if (!coverUrl) {
