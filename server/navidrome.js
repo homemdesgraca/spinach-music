@@ -318,7 +318,7 @@ const getNavidromeCoverTargets = async (request) => {
     const type = firstLine(searchParams.get('type'));
     const rawSize = firstLine(searchParams.get('size'));
     const requestedSize = Number.parseInt(rawSize, 10);
-    const coverSize = rawSize === COVER_BACKGROUND_MAX_SIZE
+    const coverSize = rawSize === 'max' || requestedSize === COVER_BACKGROUND_MAX_SIZE
         ? COVER_BACKGROUND_MAX_SIZE
         : requestedSize === COVER_BACKGROUND_HIGH_SIZE
             ? COVER_BACKGROUND_HIGH_SIZE
@@ -332,12 +332,8 @@ const getNavidromeCoverTargets = async (request) => {
     const targets = [];
 
     if (coverArt) {
-        const coverArtParams = coverSize === COVER_BACKGROUND_MAX_SIZE
-            ? { id: coverArt }
-            : { id: coverArt, size: coverSize };
-
         targets.push({
-            artUrl: buildNavidromeUrl(connection, 'getCoverArt', coverArtParams).toString(),
+            artUrl: buildNavidromeUrl(connection, 'getCoverArt', { id: coverArt, size: coverSize }).toString(),
             cacheKey: `${cachePrefix}|coverArt|${coverArt}|size:${coverSize}`,
         });
     }

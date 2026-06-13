@@ -11,7 +11,8 @@ const COVER_CACHE_DIR = join(ROOT, '.cache', 'covers');
 const COVER_ART_SIZE = 768;
 const COVER_BACKGROUND_SIZE = 1000;
 const COVER_BACKGROUND_HIGH_SIZE = 1600;
-const COVER_BACKGROUND_MAX_SIZE = 'max';
+const COVER_BACKGROUND_MAX_SIZE = 3000;
+const COVER_REMOTE_ART_MAX_BYTES = 64 * 1024 * 1024;
 
 const fetchRemoteBinary = (remoteUrl, redirects = 4) => new Promise((resolve, reject) => {
     const client = remoteUrl.startsWith('https:') ? https : http;
@@ -28,12 +29,19 @@ const fetchRemoteBinary = (remoteUrl, redirects = 4) => new Promise((resolve, re
             return;
         }
 
+        const contentLength = Number(remoteResponse.headers['content-length']);
+        if (Number.isFinite(contentLength) && contentLength > COVER_REMOTE_ART_MAX_BYTES) {
+            reject(new Error('remote art too large'));
+            remoteResponse.resume();
+            return;
+        }
+
         const chunks = [];
         let total = 0;
 
         remoteResponse.on('data', (chunk) => {
             total += chunk.length;
-            if (total > 12 * 1024 * 1024) {
+            if (total > COVER_REMOTE_ART_MAX_BYTES) {
                 remoteResponse.destroy(new Error('remote art too large'));
                 return;
             }

@@ -91,7 +91,7 @@ const getCoverBackgroundSize = () => {
     const quality = getBackgroundCoverQuality();
 
     if (quality === BACKGROUND_COVER_QUALITIES.MAX) {
-        return 'max';
+        return 3000;
     }
 
     return quality === BACKGROUND_COVER_QUALITIES.AMAZING ? 1600 : 1000;
